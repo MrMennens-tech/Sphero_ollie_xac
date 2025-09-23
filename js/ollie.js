@@ -10,7 +10,8 @@ export class Ollie {
         this.sequence = 0;
         this.isBusy = false; // Command queue flag
         this.currentHeading = 0;
-        this.batteryUpdateInterval = null; // To store the interval ID
+        this.batteryUpdateCallback = null;
+        this.controlCharacteristic = null;
 
         this.Motors = {
             off: 0x00, forward: 0x01, reverse: 0x02,
@@ -26,7 +27,6 @@ export class Ollie {
             ANTIDOS: "22bb746f-2bbd-7554-2d6f-726568705327",
             POWER: "22bb746f-2bb2-7554-2d6f-726568705327",
             WAKE: "22bb746f-2bbf-7554-2d6f-726568705327",
-            BATT_NOTIFICATION: '22bb746f-2bb1-7554-2d6f-726568705327',
         };
     }
 
@@ -48,7 +48,7 @@ export class Ollie {
 
     onDisconnected() {
         console.log('--- OLLIE DISCONNECTED --- Device object is now null.');
-        this.stopBatteryUpdates(); // Stop polling when disconnected
+        this.controlCharacteristic = null;
         this.device = null;
         if (this.onDisconnectedCallback) {
             this.onDisconnectedCallback();
@@ -63,6 +63,14 @@ export class Ollie {
         console.log('> Wrote TX Power characteristic');
         await this._writeCharacteristic(this.services.RADIO, this.characteristics.WAKE, new Uint8Array([0x01]));
         console.log('> Wrote Wake CPU characteristic');
+        
+        // --- NEW: Setup response listener ---
+        const service = await this.device.gatt.getPrimaryService(this.services.ROBOT);
+        this.controlCharacteristic = await service.getCharacteristic(this.characteristics.CONTROL);
+        this.controlCharacteristic.addEventListener('characteristicvaluechanged', this._handleResponse.bind(this));
+        await this.controlCharacteristic.startNotifications();
+        console.log('> Response listener activated.');
+
         await this.setBackLed(0);
         console.log('> Back LED set to off');
         await this.setHeading(0);
@@ -77,7 +85,6 @@ export class Ollie {
         return this._sendCommand(did, cid, data);
     }
     stop() {
-        // This provides a more forceful stop than drive(0,0)
         return this.setRawMotors(this.Motors.off, 0, this.Motors.off, 0);
     }
     setColor(r, g, b) {
@@ -110,48 +117,42 @@ export class Ollie {
         this.device.gatt.disconnect();
     }
     
-    // --- MODIFIED: Battery Polling instead of Notifications ---
-    async _readBatteryLevel(callback) {
-         if (!this.device || !this.device.gatt.connected) return;
-         try {
-            const service = await this.device.gatt.getPrimaryService(this.services.RADIO);
-            const characteristic = await service.getCharacteristic(this.characteristics.BATT_NOTIFICATION);
-            const value = await characteristic.readValue();
+    // --- CORRECTED BATTERY LOGIC: ASYNC NOTIFICATION-BASED ---
+    _handleResponse(event) {
+        const value = event.target.value;
+        const data = new Uint8Array(value.buffer);
+
+        // Check for async power notification (ID=0x01)
+        if (data.length > 5 && data[2] === 0x01) {
+            const state = data[5];
+            const voltage = value.getUint16(6, false) / 100.0; // big-endian
+            const chargeCount = value.getUint16(8, false);
             
-            const voltage = value.getUint16(0, false) / 100.0; // big-endian
+            // console.log(`> Battery Response: State=${state}, Voltage=${voltage}, Charges=${chargeCount}`);
+            
             const minVoltage = 7.0, maxVoltage = 8.4;
             const percentage = Math.round(((voltage - minVoltage) / (maxVoltage - minVoltage)) * 100);
             const clampedPercentage = Math.max(0, Math.min(100, percentage));
-            if (callback) callback(clampedPercentage);
-
-         } catch (error) {
-            console.error("Could not read battery level.", error);
-            if (callback) callback(null); // Report null on error
-         }
+            
+            if (this.batteryUpdateCallback) {
+                this.batteryUpdateCallback(clampedPercentage);
+            }
+        }
     }
 
     async startBatteryUpdates(callback) {
         if (!this.device || !this.device.gatt.connected) throw new Error("Device not connected.");
-        
-        // Stop any existing interval
-        if (this.batteryUpdateInterval) {
-            clearInterval(this.batteryUpdateInterval);
-        }
-
-        // Read once immediately, then start polling
-        await this._readBatteryLevel(callback); 
-        this.batteryUpdateInterval = setInterval(() => {
-            this._readBatteryLevel(callback);
-        }, 30000); // Poll every 30 seconds
-        console.log('> Started polling for battery updates.');
+        this.batteryUpdateCallback = callback;
+        // Send command to enable power notifications from the robot
+        await this._sendCommand(0x00, 0x21, new Uint8Array([0x01]));
+        console.log('> Requested to start battery updates.');
     }
 
-    stopBatteryUpdates() {
-        if (this.batteryUpdateInterval) {
-            clearInterval(this.batteryUpdateInterval);
-            this.batteryUpdateInterval = null;
-            console.log('> Stopped polling for battery updates.');
-        }
+    async stopBatteryUpdates() {
+        if (!this.device || !this.device.gatt.connected) return;
+        // Send command to disable power notifications
+        await this._sendCommand(0x00, 0x21, new Uint8Array([0x00]));
+        console.log('> Requested to stop battery updates.');
     }
 
     // --- Private BLE Methods ---
@@ -174,7 +175,13 @@ export class Ollie {
         packets.set([chk], 6 + data.byteLength);
 
         try {
-            await this._writeCharacteristic(this.services.ROBOT, this.characteristics.CONTROL, packets);
+            // Re-use the characteristic we stored in init()
+            if (this.controlCharacteristic) {
+                await this.controlCharacteristic.writeValue(packets);
+            } else {
+                // Fallback for commands before init is fully complete
+                await this._writeCharacteristic(this.services.ROBOT, this.characteristics.CONTROL, packets);
+            }
         } catch (error) {
             console.error('Failed to send command:', error);
         } finally {
@@ -182,6 +189,7 @@ export class Ollie {
         }
     }
 
+    // This is now a fallback, direct writing is less efficient
     async _writeCharacteristic(serviceUID, characteristicUID, value) {
         if (!this.device?.gatt.connected) {
             console.error('Write failed: Not connected.');
