@@ -66,8 +66,9 @@ export class Ollie {
         console.log('> Wrote TX Power characteristic');
         await this._writeCharacteristic(this.config.radioService(), this.config.wakeUpCPUCharateristic(), new Uint8Array([0x01]));
         console.log('> Wrote Wake CPU characteristic');
+        // CORRECTED: Explicitly turn off the back LED on init.
         await this.setBackLed(0);
-        console.log('> Back LED set to off');
+        console.log('> Back LED explicitly set to OFF');
         await this.setHeading(0);
         console.log('> Heading set, device is ready!');
     }
@@ -133,8 +134,7 @@ export class Ollie {
 
     async _sendCommand(did, cid, data) {
         if (this.isBusy) {
-            // console.log('Command dropped, Ollie is busy.');
-            return; // Drop command if another is in progress
+            return; 
         }
         
         this.isBusy = true;
