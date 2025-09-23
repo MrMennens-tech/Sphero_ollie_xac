@@ -27,15 +27,17 @@ const AIM_HOLD_DURATION = 3000;
 let joystickDeadzone = 0.4;
 let stopCommandInterval = null;
 let trickModeLEDInterval = null;
+let batteryCheckInterval = null;
 
 // --- Controller Configuration ---
-let buttonMappings = { SPEED_UP: 5, SPEED_DOWN: 6, COLOR_X1: 2, COLOR_X2_AIM: 3, COLOR_X3: 0, COLOR_X4: 1, CYCLE_MODE: 10 };
+let buttonMappings = { SPEED_UP: 4, SPEED_DOWN: 6, COLOR_X1: 2, COLOR_X2_AIM: 3, COLOR_X3: 0, COLOR_X4: 1, CYCLE_MODE: 10 };
 let isWaitingForInput = false;
 let actionToMap = '';
 
 // --- Helper & UI Functions ---
 const hexToRgb = (hex) => ({ r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16) });
-const updateUI = (el, text, className) => { if(text) el.textContent = text; if(className) el.className = className; };
+const updateUI = (el, text, className) => { if(el) { if(text !== null) el.textContent = text; if(className) el.className = className; } };
+
 function updateOllieStatus(text, statusClass) {
     updateUI(ollieStatus, `Ollie: ${text}`);
     updateUI(ollieStatusDot, null, `status-dot ${statusClass}`);
@@ -128,12 +130,17 @@ function gameLoop() {
     if (gamepadIndex === null) return requestAnimationFrame(gameLoop);
     const gp = navigator.getGamepads()[gamepadIndex];
     if (!gp) return requestAnimationFrame(gameLoop);
+    
+    // --- DEBUGGING ---
+    const buttonValues = gp.buttons.map((b, i) => `B${i}:${b.value.toFixed(2)}`).join(' | ');
+    console.log(`[Debug] Buttons: ${buttonValues}`);
+    // --- END DEBUGGING ---
 
     if (isWaitingForInput) {
         const pressedButton = gp.buttons.findIndex(b => b.pressed || b.value > 0.5);
         if (pressedButton > -1) {
+            console.log(`[Config Debug] Button press detected on index: ${pressedButton} for action: ${actionToMap}`);
             buttonMappings[actionToMap] = pressedButton;
-            console.log(`[Config] Mapped ${actionToMap} to button B${pressedButton}`);
             document.getElementById(`map-${actionToMap}`).textContent = `${actionToMap.replace(/_/g, ' ')} (B${pressedButton})`;
             isWaitingForInput = false;
             configInstructions.textContent = 'Gekoppeld! Kies een andere actie.';
@@ -142,11 +149,18 @@ function gameLoop() {
     }
 
     const getBtn = (action) => gp.buttons[buttonMappings[action]];
+    // --- CORRECTED BUTTON STATE LOGIC ---
     const btnState = (action) => {
         const btn = getBtn(action);
-        return btn ? (action === 'SPEED_DOWN' ? btn.value > 0.5 : btn.pressed) : false;
+        if (!btn) return false;
+        // Treat specific actions as triggers, others as simple presses.
+        if (action === 'SPEED_DOWN' || action === 'SPEED_UP') {
+            return btn.value > 0.5;
+        }
+        return btn.pressed;
     };
     const btnPressed = (action) => btnState(action) && !previousButtonStates[buttonMappings[action]];
+    // --- END CORRECTION ---
 
     if (btnPressed('CYCLE_MODE')) cycleMode();
 
@@ -188,16 +202,23 @@ function gameLoop() {
             if (!stopCommandInterval) { ollie.drive(0, 0); stopCommandInterval = setInterval(() => ollie.drive(0, 0), 100); }
         }
     }
-    previousButtonStates = gp.buttons.map(b => b.pressed || b.value > 0.5);
+    // Update previous states for all buttons, checking value for triggers
+    previousButtonStates = gp.buttons.map((b, i) => {
+        const mappingAction = Object.keys(buttonMappings).find(key => buttonMappings[key] === i);
+        if(mappingAction === 'SPEED_UP' || mappingAction === 'SPEED_DOWN'){
+            return b.value > 0.5;
+        }
+        return b.pressed;
+    });
     requestAnimationFrame(gameLoop);
 }
 
 // --- Event Listeners ---
 connectButton.addEventListener('click', async () => {
     if (ollie.device?.gatt.connected) {
-        if (trickModeLEDInterval) { clearInterval(trickModeLEDInterval); trickModeLEDInterval = null; }
+        if (trickModeLEDInterval) clearInterval(trickModeLEDInterval);
+        if (batteryCheckInterval) clearInterval(batteryCheckInterval);
         try { 
-            await ollie.stopBatteryUpdates();
             await ollie.sleep(); 
             setTimeout(() => ollie.disconnect(), 300); 
         } catch (e) { ollie.disconnect(); }
@@ -206,7 +227,8 @@ connectButton.addEventListener('click', async () => {
             updateOllieStatus('Zoeken...', 'connecting');
             const onDisconnect = () => {
                 updateOllieStatus('Niet verbonden', 'disconnected');
-                if (trickModeLEDInterval) { clearInterval(trickModeLEDInterval); trickModeLEDInterval = null; }
+                if (trickModeLEDInterval) clearInterval(trickModeLEDInterval);
+                if (batteryCheckInterval) clearInterval(batteryCheckInterval);
                 updateBatteryUI(null);
             };
             await ollie.request(onDisconnect);
@@ -214,7 +236,12 @@ connectButton.addEventListener('click', async () => {
             await ollie.connect();
             await ollie.init();
             updateOllieStatus('Verbonden', 'connected');
-            await ollie.startBatteryUpdates(updateBatteryUI);
+            // Start manual battery check
+            batteryCheckInterval = setInterval(async () => {
+                const level = await ollie.getBatteryLevel();
+                updateBatteryUI(level);
+            }, 30000); // Check every 30 seconds
+            updateBatteryUI(await ollie.getBatteryLevel()); // Initial check
         } catch (e) { updateOllieStatus('Verbinding mislukt', 'disconnected'); }
     }
 });
@@ -243,7 +270,7 @@ closeConfigButton.addEventListener('click', () => { configModal.classList.add('h
 document.querySelectorAll('.btn-config').forEach(btn => btn.addEventListener('click', (e) => {
     actionToMap = e.target.dataset.action;
     isWaitingForInput = true;
-    const logMessage = `[Config] Wacht op invoer voor ${actionToMap}...`;
+    const logMessage = `[Config Debug] Wacht op invoer voor actie: ${actionToMap}...`;
     configInstructions.textContent = logMessage;
     console.log(logMessage);
 }));
