@@ -53,9 +53,7 @@ function updateOllieStatus(text, statusClass) {
 }
 const updateGamepadStatus = (text, statusClass) => { updateUI(gamepadStatus, `Gamepad: ${text}`); updateUI(gamepadStatusDot, null, `status-dot ${statusClass}`); };
 function updateSpeedIndicator() {
-    let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
-    if (currentMode === 'trick') speedCap = 1.0;
-    updateUI(speedIndicator, `Max Snelheid: ${Math.round(Math.min(maxSpeed, speedCap) * 100)}%`);
+    updateUI(speedIndicator, `Max Snelheid: ${Math.round(maxSpeed * 100)}%`);
 }
 function updateModeIndicator() {
     const modes = { normal: ['Normaal', 'bg-slate-800'], trick: ['Trick', 'bg-purple-700'], aiming: ['Richten...', 'bg-yellow-600'] };
@@ -72,7 +70,6 @@ const joystickManager = nipplejs.create({
     color: 'white', 
     size: 150 
 });
-
 joystickManager.on('move', (evt, data) => {
     if (!ollie.device || gamepadIndex !== null || currentMode === 'trick' || isAiming) return;
     const speed = Math.min(Math.floor(data.distance * 3), 255);
@@ -81,14 +78,20 @@ joystickManager.on('move', (evt, data) => {
     ollie.drive(heading, Math.round(speed * Math.min(maxSpeed, speedCap)));
     isDriving = true;
 });
-
 joystickManager.on('end', () => { 
     if (isDriving) { ollie.drive(0, 0); isDriving = false; } 
 });
 
-
 // --- Core Logic ---
-function changeMaxSpeed(amount) { maxSpeed = Math.max(0.1, maxSpeed + SPEED_STEP * amount); updateSpeedIndicator(); applyColor(currentColor.r, currentColor.g, currentColor.b, true); };
+function changeMaxSpeed(amount) {
+    let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
+    if (currentMode === 'trick') speedCap = 1.0;
+    
+    let newSpeed = maxSpeed + SPEED_STEP * amount;
+    maxSpeed = Math.max(0.1, Math.min(newSpeed, speedCap)); // Clamp between 0.1 and the current speed cap
+    updateSpeedIndicator();
+    applyColor(currentColor.r, currentColor.g, currentColor.b, true);
+};
 function applyColor(r, g, b, internalCall = false) {
     if (!ollie.device) return;
     currentColor = { r, g, b };
@@ -114,8 +117,7 @@ const handleAiming = (gp) => {
 };
 function cycleMode() {
     const modes = ['normal', 'trick'];
-    const oldMode = currentMode;
-    currentMode = modes[(modes.indexOf(currentMode) + 1) % modes.length];
+    currentMode = (currentMode === 'normal') ? 'trick' : 'normal';
 
     if (currentMode === 'trick') {
         if (trickModeLEDInterval) clearInterval(trickModeLEDInterval);
@@ -131,7 +133,7 @@ function cycleMode() {
         applyColor(currentColor.r, currentColor.g, currentColor.b, true); 
     }
 
-    if (oldMode === 'trick' && ollie.device) { ollie.setHeading(0); console.log("Exited trick mode, recalibrating heading."); }
+    if (currentMode === 'normal' && ollie.device) { ollie.setHeading(0); console.log("Exited trick mode, recalibrating heading."); }
     updateModeIndicator();
     updateSpeedIndicator();
 }
