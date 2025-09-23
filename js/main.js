@@ -13,6 +13,7 @@ const configInstructions = document.getElementById('config-instructions');
 const deadzoneSlider = document.getElementById('deadzone-slider');
 const colorInputs = { x1: document.getElementById('color-x1'), x2: document.getElementById('color-x2'), x3: document.getElementById('color-x3'), x4: document.getElementById('color-x4') };
 const ollieBatteryText = document.getElementById('ollie-battery'), batteryLevelBar = document.getElementById('battery-level');
+const emergencyStopButton = document.getElementById('emergency-stop-button');
 
 
 // --- State Variables ---
@@ -26,11 +27,9 @@ let buttonColorMappings = { x1: '#ff0000', x2: '#0000ff', x3: '#00ff00', x4: '#f
 const AIM_HOLD_DURATION = 3000;
 let joystickDeadzone = 0.4;
 let stopCommandInterval = null;
-let batteryInterval = null;
 let trickModeLEDInterval = null;
 
 // --- Controller Configuration ---
-// MODIFIED: Swapped default buttons for speed up/down
 let buttonMappings = { SPEED_DOWN: 6, SPEED_UP: 4, COLOR_X1: 2, COLOR_X2_AIM: 3, COLOR_X3: 0, COLOR_X4: 1, CYCLE_MODE: 10 };
 let isWaitingForInput = false;
 let actionToMap = '';
@@ -42,6 +41,7 @@ function updateOllieStatus(text, statusClass) {
     updateUI(ollieStatus, `Ollie: ${text}`);
     updateUI(ollieStatusDot, null, `status-dot ${statusClass}`);
     updateUI(connectButton, statusClass === 'connected' ? 'Verbreek Verbinding' : 'Verbind met Ollie', statusClass === 'connected' ? 'btn btn-red' : 'btn btn-blue');
+    emergencyStopButton.classList.toggle('hidden', statusClass !== 'connected');
 }
 const updateGamepadStatus = (text, statusClass) => { updateUI(gamepadStatus, `Gamepad: ${text}`); updateUI(gamepadStatusDot, null, `status-dot ${statusClass}`); };
 function updateSpeedIndicator() {
@@ -59,14 +59,14 @@ function updateBatteryUI(level) {
     if (level === null) {
         ollieBatteryText.textContent = 'Batterij: N/A';
         batteryLevelBar.style.width = '100%';
-        batteryLevelBar.style.backgroundColor = '#6b7280'; // gray-500
+        batteryLevelBar.style.backgroundColor = '#6b7280';
         return;
     }
     ollieBatteryText.textContent = `Batterij: ${level}%`;
     batteryLevelBar.style.width = `${level}%`;
-    if (level > 50) batteryLevelBar.style.backgroundColor = '#4ade80'; // green-400
-    else if (level > 20) batteryLevelBar.style.backgroundColor = '#facc15'; // yellow-400
-    else batteryLevelBar.style.backgroundColor = '#f87171'; // red-400
+    if (level > 50) batteryLevelBar.style.backgroundColor = '#4ade80';
+    else if (level > 20) batteryLevelBar.style.backgroundColor = '#facc15';
+    else batteryLevelBar.style.backgroundColor = '#f87171';
 }
 
 // --- On-screen Joystick ---
@@ -87,15 +87,8 @@ function applyColor(r, g, b, internalCall = false) {
     if (!ollie.device) return;
     currentColor = { r, g, b };
     let speedCap = (currentMode === 'expert') ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
-    
-    // Brightness reaches 100% when speed is at 50% of the cap.
     const brightnessMultiplier = Math.min(1.0, (maxSpeed / speedCap) / 0.5);
-
-    ollie.setColor(
-        Math.round(r * brightnessMultiplier), 
-        Math.round(g * brightnessMultiplier), 
-        Math.round(b * brightnessMultiplier)
-    );
+    ollie.setColor(Math.round(r * brightnessMultiplier), Math.round(g * brightnessMultiplier), Math.round(b * brightnessMultiplier));
 }
 async function doTrick(trickName) {
     if (!ollie.device) return;
@@ -136,7 +129,6 @@ function cycleMode() {
     updateSpeedIndicator();
 }
 
-
 // --- Main Gamepad Loop ---
 function gameLoop() {
     if (!gamepadIndex && gamepadIndex !== 0) return requestAnimationFrame(gameLoop);
@@ -146,7 +138,6 @@ function gameLoop() {
     if (isWaitingForInput) {
         const pressedButton = gp.buttons.findIndex(b => b.pressed || b.value > 0.5);
         if (pressedButton > -1) {
-            console.log(`[Config] Detected button press! Index: ${pressedButton}, Value: ${gp.buttons[pressedButton].value.toFixed(2)}`);
             buttonMappings[actionToMap] = pressedButton;
             document.getElementById(`map-${actionToMap}`).textContent = `B${pressedButton}`;
             isWaitingForInput = false;
@@ -158,7 +149,6 @@ function gameLoop() {
     const getBtn = (action) => gp.buttons[buttonMappings[action]];
     const btnState = (action) => {
         const btn = getBtn(action);
-        // MODIFIED: Check for trigger on SPEED_DOWN
         return btn ? (action === 'SPEED_DOWN' ? btn.value > 0.5 : btn.pressed) : false;
     };
     const btnPressed = (action) => btnState(action) && !previousButtonStates[buttonMappings[action]];
@@ -179,7 +169,7 @@ function gameLoop() {
         if (btnPressed('COLOR_X3')) doTrick('flipBackward');
         if (btnPressed('COLOR_X4')) doTrick('spinRight');
         if (btnPressed('COLOR_X2_AIM')) doTrick('flipForward');
-    } else { // Normal or Expert
+    } else {
         if (btnState('COLOR_X2_AIM') && !previousButtonStates[buttonMappings['COLOR_X2_AIM']]) aimButtonPressTime = Date.now();
         if (btnState('COLOR_X2_AIM') && Date.now() - aimButtonPressTime > AIM_HOLD_DURATION) { isAiming = true; ollie.setBackLed(255); updateModeIndicator(); }
         if (!btnState('COLOR_X2_AIM') && previousButtonStates[buttonMappings['COLOR_X2_AIM']]) { if (Date.now() - aimButtonPressTime < AIM_HOLD_DURATION) { const { r, g, b } = hexToRgb(buttonColorMappings.x2); applyColor(r, g, b); } }
@@ -210,15 +200,17 @@ function gameLoop() {
 // --- Event Listeners ---
 connectButton.addEventListener('click', async () => {
     if (ollie.device?.gatt.connected) {
-        if (batteryInterval) { clearInterval(batteryInterval); batteryInterval = null; }
         if (trickModeLEDInterval) { clearInterval(trickModeLEDInterval); trickModeLEDInterval = null; }
-        try { await ollie.setBackLed(0); await ollie.sleep(); setTimeout(() => ollie.disconnect(), 300); } catch (e) { ollie.disconnect(); }
+        try { 
+            await ollie.stopBatteryUpdates();
+            await ollie.sleep(); 
+            setTimeout(() => ollie.disconnect(), 300); 
+        } catch (e) { ollie.disconnect(); }
     } else {
         try {
             updateOllieStatus('Zoeken...', 'connecting');
             const onDisconnect = () => {
                 updateOllieStatus('Niet verbonden', 'disconnected');
-                if (batteryInterval) { clearInterval(batteryInterval); batteryInterval = null; }
                 if (trickModeLEDInterval) { clearInterval(trickModeLEDInterval); trickModeLEDInterval = null; }
                 updateBatteryUI(null);
             };
@@ -227,12 +219,7 @@ connectButton.addEventListener('click', async () => {
             await ollie.connect();
             await ollie.init();
             updateOllieStatus('Verbonden', 'connected');
-            if (batteryInterval) clearInterval(batteryInterval);
-            batteryInterval = setInterval(async () => {
-                try { updateBatteryUI(await ollie.getBatteryLevel()); } 
-                catch (error) { updateBatteryUI(null); clearInterval(batteryInterval); }
-            }, 30000);
-            try { updateBatteryUI(await ollie.getBatteryLevel()); } catch(e){ updateBatteryUI(null); }
+            await ollie.startBatteryUpdates(updateBatteryUI);
         } catch (e) { updateOllieStatus('Verbinding mislukt', 'disconnected'); }
     }
 });
@@ -251,12 +238,19 @@ touchControlsPanel.addEventListener('touchstart', (e) => {
     else if (action === 'cycle-mode') cycleMode();
     else if (trick) doTrick(trick);
 });
+emergencyStopButton.addEventListener('click', () => {
+    if(ollie.device?.gatt.connected) {
+        console.log("EMERGENCY STOP");
+        ollie.stop();
+    }
+});
+
 let aimTouchTimeout;
 document.getElementById('touch-aim').addEventListener('touchstart', (e) => { e.preventDefault(); aimTouchTimeout = setTimeout(() => { isAiming = true; ollie.setBackLed(255); updateModeIndicator(); }, AIM_HOLD_DURATION); });
 document.getElementById('touch-aim').addEventListener('touchend', (e) => { e.preventDefault(); clearTimeout(aimTouchTimeout); if(isAiming) { isAiming = false; ollie.setHeading(ollie.currentHeading); ollie.setBackLed(0); updateModeIndicator(); } });
 
 openConfigButton.addEventListener('click', () => configModal.classList.remove('hidden'));
-closeConfigButton.addEventListener('click', () => { configModal.classList.add('hidden'); isWaitingForInput = false; configInstructions.textContent = 'Druk op een knop om te koppelen...'; });
+closeConfigButton.addEventListener('click', () => { configModal.classList.add('hidden'); isWaitingForInput = false; configInstructions.textContent = 'Kies een actie en druk de gewenste knop in op je controller.'; });
 document.querySelectorAll('.btn-config').forEach(btn => btn.addEventListener('click', (e) => {
     actionToMap = e.target.dataset.action;
     isWaitingForInput = true;
