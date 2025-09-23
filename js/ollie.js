@@ -92,7 +92,6 @@ export class Ollie {
     async _sendCommand(did, cid, data) {
         if (this.isBusy) return Promise.resolve();
         if (!this.device || !this.device.gatt.connected || !this.controlCharacteristic) {
-            // console.error('Cannot send command: Not connected or characteristic not available.');
             return;
         }
         this.isBusy = true;
