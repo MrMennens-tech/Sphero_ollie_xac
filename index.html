@@ -160,8 +160,16 @@
                  <div id="speed-indicator" class="w-full text-center p-3 rounded-lg font-medium text-lg shadow-lg bg-slate-800">Max Snelheid: 20%</div>
             </div>
              <div id="settings-panel" class="space-y-4">
-                <!-- Color pickers moved here -->
-                <div class="space-y-2">
+                <!-- Expert Mode Toggle -->
+                <div class="flex items-center justify-center space-x-3 p-3 bg-slate-800 rounded-lg">
+                    <label for="toggle-expert-checkbox" class="font-medium text-slate-300">Expert Modus</label>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="toggle-expert-checkbox" class="sr-only peer">
+                        <div class="w-11 h-6 bg-slate-700 rounded-full peer peer-focus:ring-4 peer-focus:ring-green-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                    </label>
+                </div>
+                
+                <div class="space-y-2 pt-4">
                     <h3 class="text-lg font-semibold text-center text-slate-300">Kleuren Knoppen</h3>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 items-center">
                          <label for="color-x1" class="text-center">X1 (A)</label><input type="color" id="color-x1" value="#ff0000">
