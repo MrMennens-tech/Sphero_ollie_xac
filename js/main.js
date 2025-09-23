@@ -44,13 +44,15 @@ joystickManager.on('move', (evt, data) => {
     if (!ollie.device || gamepadIndex !== null || isTrickMode) return;
     const speed = Math.min(Math.floor(data.distance * 3), 255);
     const heading = Math.round(data.angle.degree);
-    ollie.drive(Math.round(speed * maxSpeed), heading);
+    // Note the new argument order for drive: heading, then speed
+    ollie.drive(heading, Math.round(speed * maxSpeed));
     isDriving = true;
 });
 
 joystickManager.on('end', () => {
     if (!ollie.device || !isDriving) return;
-    ollie.drive(0, 0); // Stop
+    // Stop: drive with current heading but 0 speed
+    ollie.drive(ollie.currentHeading, 0);
     isDriving = false;
 });
 
@@ -85,10 +87,10 @@ function applyColor(r, g, b, internalCall = false) {
     const brightR = Math.round(r * maxSpeed);
     const brightG = Math.round(g * maxSpeed);
     const brightB = Math.round(b * maxSpeed);
+    // Note the argument order for setColor: r, g, b
     ollie.setColor(brightR, brightG, brightB);
 
     if (!internalCall) {
-        // Update color picker UI if changed by gamepad
         const toHex = c => ('0'+(c).toString(16)).slice(-2);
         colorPicker.value = `#${toHex(r)}${toHex(g)}${toHex(b)}`;
     }
@@ -103,21 +105,21 @@ async function doTrick(trickName) {
     if (!ollie.device) return;
     switch(trickName) {
         case 'spinLeft':
-            await ollie.setRawMotors(2, 200, 1, 200);
-            setTimeout(() => ollie.setRawMotors(0, 0, 0, 0), 500);
+            await ollie.setRawMotors(ollie.Motors.reverse, 200, ollie.Motors.forward, 200);
+            setTimeout(() => ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0), 500);
             break;
         case 'spinRight':
-            await ollie.setRawMotors(1, 200, 2, 200);
-            setTimeout(() => ollie.setRawMotors(0, 0, 0, 0), 500);
+            await ollie.setRawMotors(ollie.Motors.forward, 200, ollie.Motors.reverse, 200);
+            setTimeout(() => ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0), 500);
             break;
         case 'flipForward':
-            await ollie.drive(255, ollie.currentHeading);
-            setTimeout(() => ollie.drive(0, ollie.currentHeading), 300);
+            await ollie.drive(ollie.currentHeading, 255);
+            setTimeout(() => ollie.drive(ollie.currentHeading, 0), 300);
             break;
         case 'flipBackward':
             const backHeading = (ollie.currentHeading + 180) % 360;
-            await ollie.drive(255, backHeading);
-            setTimeout(() => ollie.drive(0, backHeading), 300);
+            await ollie.drive(backHeading, 255);
+            setTimeout(() => ollie.drive(backHeading, 0), 300);
             break;
     }
 }
@@ -162,10 +164,10 @@ function gameLoop() {
             if (heading < 0) heading += 360;
             
             if (ollie.device) {
-                ollie.drive(Math.round(speed * maxSpeed), heading);
+                ollie.drive(Math.round(heading), Math.round(speed * maxSpeed));
             }
         } else if (isDriving) {
-            if (ollie.device) ollie.drive(0, 0);
+            if (ollie.device) ollie.drive(ollie.currentHeading, 0);
             isDriving = false;
         }
     }
@@ -177,16 +179,24 @@ function gameLoop() {
 // --- Event Listeners ---
 connectButton.addEventListener('click', async () => {
     if (ollie.device && ollie.device.gatt.connected) {
-        ollie.device.gatt.disconnect();
+        ollie.disconnect();
     } else {
         try {
             updateOllieStatus('Zoeken...', 'connecting');
-            await ollie.connect();
-            updateOllieStatus('Verbonden', 'connected');
-            // Re-add event listener after successful connection
-            ollie.device.addEventListener('gattserverdisconnected', () => {
+            
+            // This function will be called by the Ollie class if the connection drops.
+            const handleDisconnect = () => {
                 updateOllieStatus('Niet verbonden', 'disconnected');
-            });
+            };
+
+            await ollie.request(handleDisconnect);
+            
+            console.log('Request returned. Device object:', ollie.device);
+
+            updateOllieStatus('Verbinden...', 'connecting');
+            await ollie.connect();
+            await ollie.init();
+            updateOllieStatus('Verbonden', 'connected');
         } catch (error) {
             console.error('Connection process failed:', error);
             updateOllieStatus('Verbinding mislukt', 'disconnected');
@@ -201,3 +211,4 @@ colorPicker.addEventListener('input', (event) => {
     const b = parseInt(hex.slice(5, 7), 16);
     applyColor(r, g, b);
 });
+
