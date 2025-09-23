@@ -156,6 +156,7 @@ function handleAiming(gp) {
         if (heading < 0) heading += 360;
         lastAimHeading = Math.round(heading);
         const spinSpeed = 80;
+        // Simple spin based on x-axis
         if (x > 0) {
              ollie.setRawMotors(ollie.Motors.forward, spinSpeed, ollie.Motors.reverse, spinSpeed);
         } else {
@@ -172,52 +173,57 @@ function gameLoop() {
     const gp = navigator.getGamepads()[gamepadIndex];
     if (!gp) return;
 
-    // --- Debug log for all button values ---
-    const buttonDebug = gp.buttons.map((b, i) => `B${i}:${b.value.toFixed(2)}`).join(' ');
-    console.log(`DEBUG: ${buttonDebug}`);
-    // ---------------------------------------------
-
     const TRIGGER_THRESHOLD = 0.5;
-    // CORRECTED: Check index 6 for the trigger value
     const currentButtonStates = gp.buttons.map((button, index) => ({
+        // Button 6 (X6) is a trigger
         pressed: (index === 6) ? button.value > TRIGGER_THRESHOLD : button.pressed,
         value: button.value
     }));
     
-    const aimButtonPressed = currentButtonStates[1].pressed;
-    const prevAimButtonPressed = previousButtonStates[1].pressed;
-
-    if (aimButtonPressed && !prevAimButtonPressed) {
+    // CORRECTED BUTTON MAPPING
+    const btn_X1 = currentButtonStates[2]; // B2 = Red
+    const btn_X2 = currentButtonStates[3]; // B3 = Blue / Aim
+    const btn_X3 = currentButtonStates[0]; // B0 = Green
+    const btn_X4 = currentButtonStates[1]; // B1 = Yellow
+    const btn_X5 = currentButtonStates[4]; // B4 = Speed Down
+    const btn_X6 = currentButtonStates[6]; // B6 = Speed Up (Trigger)
+    
+    const prev_btn_X2 = previousButtonStates[3];
+    
+    // AIMING LOGIC (uses X2/B3)
+    if (btn_X2.pressed && !prev_btn_X2.pressed) {
         aimButtonPressTime = Date.now();
     }
 
-    if (aimButtonPressed) {
+    if (btn_X2.pressed) {
         if (!isAiming && Date.now() - aimButtonPressTime > AIM_HOLD_DURATION) {
             isAiming = true;
-            ollie.setBackLed(255);
+            ollie.setBackLed(255); // Turn AIM LED ON
             updateModeIndicator();
         }
     }
 
-    if (!aimButtonPressed && prevAimButtonPressed) {
+    if (!btn_X2.pressed && prev_btn_X2.pressed) {
         if (isAiming) {
             isAiming = false;
             ollie.setHeading(lastAimHeading);
-            ollie.setBackLed(0);
+            ollie.setBackLed(0); // Turn AIM LED OFF
             ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
             updateModeIndicator();
         } else {
-             if (!isTrickMode) applyColor(0, 0, 255);
+             // Short press of X2/B3
+             if (!isTrickMode) applyColor(0, 0, 255); // Set color to blue
              else doTrick('flipForward');
         }
         aimButtonPressTime = 0;
     }
 
+    // MAIN CONTROL LOGIC
     if (isAiming) {
         handleAiming(gp);
     } else {
-        // CORRECTED: Check buttons 4 and 6 for combo
-        const comboPressed = currentButtonStates[4].pressed && currentButtonStates[6].pressed;
+        // TRICK MODE TOGGLE (X5+X6 / B4+B6)
+        const comboPressed = btn_X5.pressed && btn_X6.pressed;
         const prevComboPressed = previousButtonStates[4].pressed && previousButtonStates[6].pressed;
         if (comboPressed && !prevComboPressed) {
             isTrickMode = !isTrickMode;
@@ -225,31 +231,41 @@ function gameLoop() {
         }
 
         if (isTrickMode) {
-            if (currentButtonStates[0].pressed && !previousButtonStates[0].pressed) doTrick('spinLeft');
-            if (currentButtonStates[2].pressed && !previousButtonStates[2].pressed) doTrick('flipBackward');
-            if (currentButtonStates[3].pressed && !previousButtonStates[3].pressed) doTrick('spinRight');
+            // TRICK ACTIONS
+            if (btn_X1.pressed && !previousButtonStates[2].pressed) doTrick('spinLeft');
+            if (btn_X3.pressed && !previousButtonStates[0].pressed) doTrick('flipBackward');
+            if (btn_X4.pressed && !previousButtonStates[1].pressed) doTrick('spinRight');
         } else {
-            if (currentButtonStates[4].pressed && !previousButtonStates[4].pressed) changeMaxSpeed(-0.1);
-            // CORRECTED: Check button 6 for speed up
-            if (currentButtonStates[6].pressed && !previousButtonStates[6].pressed) changeMaxSpeed(0.1);
-            if (currentButtonStates[0].pressed && !previousButtonStates[0].pressed) applyColor(255, 0, 0);
-            if (currentButtonStates[2].pressed && !previousButtonStates[2].pressed) applyColor(0, 255, 0);
-            if (currentButtonStates[3].pressed && !previousButtonStates[3].pressed) applyColor(255, 255, 0);
+            // NORMAL ACTIONS
+            if (btn_X5.pressed && !previousButtonStates[4].pressed) changeMaxSpeed(-0.1);
+            if (btn_X6.pressed && !previousButtonStates[6].pressed) changeMaxSpeed(0.1);
+            if (btn_X1.pressed && !previousButtonStates[2].pressed) applyColor(255, 0, 0);   // Red
+            if (btn_X3.pressed && !previousButtonStates[0].pressed) applyColor(0, 255, 0);   // Green
+            if (btn_X4.pressed && !previousButtonStates[1].pressed) applyColor(255, 255, 0); // Yellow
 
+            // DRIVING LOGIC
             const x = gp.axes[0];
             const y = -gp.axes[1];
-            const deadzone = 0.15;
             const magnitude = Math.sqrt(x * x + y * y);
+            
+            // NEW: Stepped speed control
+            let speed = 0;
+            if (magnitude > 0.9) {
+                speed = 255; // Fast
+            } else if (magnitude > 0.6) {
+                speed = 170; // Medium
+            } else if (magnitude > 0.2) {
+                speed = 85;  // Slow
+            }
 
-            if (magnitude > deadzone) {
+            if (speed > 0) {
                 isDriving = true;
-                const speed = Math.min(Math.floor(((magnitude - deadzone) / (1 - deadzone)) * 255), 255);
                 let heading = Math.atan2(x, y) * (180 / Math.PI);
                 if (heading < 0) heading += 360;
                 
                 ollie.drive(Math.round(heading), Math.round(speed * maxSpeed));
             } else if (isDriving) {
-                ollie.drive(ollie.currentHeading, 0); // This will now go through the queue correctly
+                ollie.drive(ollie.currentHeading, 0);
                 isDriving = false;
             }
         }
@@ -265,7 +281,10 @@ connectButton.addEventListener('click', async () => {
         try {
             console.log('Putting Ollie to sleep before disconnecting...');
             await ollie.sleep();
-            ollie.disconnect(); // Disconnect immediately after sleep command is sent
+            // NEW: Wait for sleep command to process before disconnecting
+            setTimeout(() => {
+                ollie.disconnect();
+            }, 300); 
         } catch (error) {
             console.error('Failed to send sleep command, disconnecting anyway.', error);
             ollie.disconnect();
@@ -280,8 +299,6 @@ connectButton.addEventListener('click', async () => {
 
             await ollie.request(handleDisconnect);
             
-            console.log('Request returned. Device object:', ollie.device);
-
             updateOllieStatus('Verbinden...', 'connecting');
             await ollie.connect();
             await ollie.init();
