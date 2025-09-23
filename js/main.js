@@ -1,4 +1,4 @@
-import { Ollie } from './ollie.js'; 
+import { Ollie } from './ollie.js';
 
 // --- DOM Elements ---
 const connectButton = document.getElementById('connect-button');
@@ -6,6 +6,7 @@ const ollieStatus = document.getElementById('ollie-status'), ollieStatusDot = do
 const gamepadStatus = document.getElementById('gamepad-status'), gamepadStatusDot = document.getElementById('gamepad-status-dot');
 const speedIndicator = document.getElementById('speed-indicator'), modeIndicator = document.getElementById('mode-indicator');
 const toggleTouchCheckbox = document.getElementById('toggle-touch-checkbox');
+const toggleExpertCheckbox = document.getElementById('toggle-expert-checkbox');
 const touchControlsPanel = document.getElementById('touch-controls'), touchTricksPanel = document.getElementById('touch-tricks');
 const openConfigButton = document.getElementById('open-config-button'), configModal = document.getElementById('config-modal'), closeConfigButton = document.getElementById('close-config-button');
 const configInstructions = document.getElementById('config-instructions');
@@ -17,7 +18,8 @@ const emergencyStopButton = document.getElementById('emergency-stop-button');
 const ollie = new Ollie();
 let gamepadIndex = null, isDriving = false, previousButtonStates = [];
 let maxSpeed = 0.20, NORMAL_MAX_SPEED = 0.40, EXPERT_MAX_SPEED = 0.60, SPEED_STEP = 0.05;
-let currentMode = 'normal'; // 'normal', 'expert', 'trick'
+let currentMode = 'normal'; // 'normal', 'trick'
+let isExpertMode = false; // Separate toggle for expert
 let isAiming = false, aimButtonPressTime = 0, lastAimHeading = 0;
 let currentColor = { r: 0, g: 191, b: 255 };
 let buttonColorMappings = { x1: '#ff0000', x2: '#0000ff', x3: '#00ff00', x4: '#ffff00' };
@@ -49,12 +51,12 @@ function updateOllieStatus(text, statusClass) {
 }
 const updateGamepadStatus = (text, statusClass) => { updateUI(gamepadStatus, `Gamepad: ${text}`); updateUI(gamepadStatusDot, null, `status-dot ${statusClass}`); };
 function updateSpeedIndicator() {
-    let speedCap = (currentMode === 'expert') ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
+    let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
     if (currentMode === 'trick') speedCap = 1.0;
     updateUI(speedIndicator, `Max Snelheid: ${Math.round(Math.min(maxSpeed, speedCap) * 100)}%`);
 }
 function updateModeIndicator() {
-    const modes = { normal: ['Normaal', 'bg-slate-800'], expert: ['Expert', 'bg-green-700'], trick: ['Trick', 'bg-purple-700'], aiming: ['Richten...', 'bg-yellow-600'] };
+    const modes = { normal: ['Normaal', 'bg-slate-800'], trick: ['Trick', 'bg-purple-700'], aiming: ['Richten...', 'bg-yellow-600'] };
     const [text, className] = modes[isAiming ? 'aiming' : currentMode];
     updateUI(modeIndicator, `Modus: ${text}`, `w-full text-center p-3 rounded-lg font-medium text-lg shadow-lg ${className}`);
     touchTricksPanel.classList.toggle('hidden', currentMode !== 'trick');
@@ -65,12 +67,13 @@ function changeMaxSpeed(amount) { maxSpeed = Math.max(0.1, maxSpeed + SPEED_STEP
 function applyColor(r, g, b, internalCall = false) {
     if (!ollie.device) return;
     currentColor = { r, g, b };
-    let speedCap = (currentMode === 'expert') ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
+    let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
     const brightnessMultiplier = Math.min(1.0, maxSpeed / speedCap);
     ollie.setColor(Math.round(r * brightnessMultiplier), Math.round(g * brightnessMultiplier), Math.round(b * brightnessMultiplier));
 }
 async function doTrick(trickName) {
     if (!ollie.device) return;
+    console.log(`[Trick] Attempting to perform: ${trickName}`);
     const p = 255, M = ollie.Motors;
     const duration = trickName.includes('spin') ? 800 : 400;
     const actions = { spinLeft: [M.reverse, p, M.forward, p], spinRight: [M.forward, p, M.reverse, p], flipForward: [M.forward, p, M.forward, p], flipBackward: [M.reverse, p, M.reverse, p] };
@@ -85,7 +88,7 @@ const handleAiming = (gp) => {
     } else { ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0); }
 };
 function cycleMode() {
-    const modes = ['normal', 'expert', 'trick'];
+    const modes = ['normal', 'trick'];
     const oldMode = currentMode;
     currentMode = modes[(modes.indexOf(currentMode) + 1) % modes.length];
 
@@ -110,26 +113,22 @@ function cycleMode() {
 
 // --- Main Gamepad Loop ---
 function gameLoop() {
-    // Stop the loop if the gamepad or Ollie is disconnected
     if (gamepadIndex === null || !ollie.device || !ollie.device.gatt.connected) {
-        if(stopCommandInterval) clearInterval(stopCommandInterval);
+        if (stopCommandInterval) clearInterval(stopCommandInterval);
         stopCommandInterval = null;
-        return; // Exit the loop completely
+        return; 
     }
     
     const gp = navigator.getGamepads()[gamepadIndex];
     if (!gp) {
-        requestAnimationFrame(gameLoop); // Keep trying to find the gamepad
+        requestAnimationFrame(gameLoop);
         return;
     }
     
-    // --- DEBUGGING ---
-    const buttonValues = gp.buttons.map((b, i) => `B${i}:${b.value.toFixed(2)}`).join(' | ');
-    // console.log(`[Debug] Buttons: ${buttonValues}`);
-    // --- END DEBUGGING ---
+    const currentButtonStates = gp.buttons.map(b => b.pressed || b.value > 0.5);
 
     if (isWaitingForInput) {
-        const newPressIndex = gp.buttons.findIndex((b, i) => (b.pressed || b.value > 0.5) && !previousButtonStates[i]);
+        const newPressIndex = currentButtonStates.findIndex((state, i) => state && !previousButtonStates[i]);
         if (newPressIndex > -1) {
             console.log(`[Config Debug] NEW Button press detected on index: ${newPressIndex} for action: ${actionToMap}`);
             buttonMappings[actionToMap] = newPressIndex;
@@ -147,7 +146,6 @@ function gameLoop() {
         };
         const btnPressed = (action) => btnState(action) && !previousButtonStates[buttonMappings[action]];
 
-        // Combo for Trick Mode
         const speedUpPressed = btnState('SPEED_UP');
         const speedDownPressed = btnState('SPEED_DOWN');
         const prevSpeedUpPressed = previousButtonStates[buttonMappings['SPEED_UP']];
@@ -166,9 +164,10 @@ function gameLoop() {
         } else if (isAiming) {
             handleAiming(gp);
             if (!btnState('COLOR_X2_AIM')) {
+                console.log("Aiming finished, turning off LED.");
                 isAiming = false;
                 ollie.setHeading(lastAimHeading);
-                ollie.setBackLed(0);
+                ollie.setBackLed(0); // Ensure LED is turned off
                 ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
                 updateModeIndicator();
             }
@@ -189,7 +188,7 @@ function gameLoop() {
                 if(stopCommandInterval) { clearInterval(stopCommandInterval); stopCommandInterval = null; }
                 let speed = (magnitude > 0.9) ? 255 : (magnitude > 0.65) ? 170 : 85;
                 const heading = Math.round((Math.atan2(x, y) * (180 / Math.PI) + 360) % 360);
-                let speedCap = (currentMode === 'expert') ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
+                let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
                 ollie.drive(heading, Math.round(speed * Math.min(maxSpeed, speedCap)));
             } else if (isDriving) {
                 isDriving = false;
@@ -198,8 +197,7 @@ function gameLoop() {
         }
     }
     
-    // Update previous states for all buttons
-    previousButtonStates = gp.buttons.map(b => b.pressed || b.value > 0.5);
+    previousButtonStates = currentButtonStates;
     requestAnimationFrame(gameLoop);
 }
 
@@ -232,6 +230,13 @@ toggleTouchCheckbox.addEventListener('change', (e) => {
     touchControlsPanel.classList.toggle('hidden', !isTouchActive);
 });
 
+toggleExpertCheckbox.addEventListener('change', (e) => {
+    isExpertMode = e.target.checked;
+    console.log(`Expert mode is now ${isExpertMode ? 'ON' : 'OFF'}`);
+    updateSpeedIndicator();
+    applyColor(currentColor.r, currentColor.g, currentColor.b, true);
+});
+
 document.querySelector('[data-action="speed-up"]').addEventListener('touchstart', (e) => { e.preventDefault(); changeMaxSpeed(1); });
 document.querySelector('[data-action="speed-down"]').addEventListener('touchstart', (e) => { e.preventDefault(); changeMaxSpeed(-1); });
 document.querySelector('[data-action="cycle-mode"]').addEventListener('touchstart', (e) => { e.preventDefault(); cycleMode(); });
@@ -257,6 +262,6 @@ document.querySelectorAll('.btn-config').forEach(btn => btn.addEventListener('cl
 deadzoneSlider.addEventListener('input', (e) => joystickDeadzone = parseFloat(e.target.value));
 Object.keys(colorInputs).forEach(key => colorInputs[key].addEventListener('input', (e) => buttonColorMappings[key] = e.target.value));
 
-window.addEventListener('gamepadconnected', (e) => { gamepadIndex = e.gamepad.index; updateGamepadStatus('Verbonden', 'connected'); previousButtonStates = e.gamepad.buttons.map(b => false); gameLoop(); });
+window.addEventListener('gamepadconnected', (e) => { gamepadIndex = e.gamepad.index; updateGamepadStatus('Verbonden', 'connected'); previousButtonStates = Array(e.gamepad.buttons.length).fill(false); gameLoop(); });
 window.addEventListener('gamepaddisconnected', (e) => { if (gamepadIndex === e.gamepad.index) { gamepadIndex = null; updateGamepadStatus('Niet verbonden', 'disconnected'); }});
 
