@@ -42,5 +42,90 @@
                         <p>Sluit je Xbox Adaptive Controller aan via USB voor automatische detectie.</p>
                         <div class="gamepad-controls">
                             <div class="control-group">
-                        
-Asset 1 van 3
+                                <h4>Beweging</h4>
+                                <ul>
+                                    <li><strong>Linker stick:</strong> Beweging (snelheid & richting)</li>
+                                    <li><strong>Rechter stick:</strong> Rotatie</li>
+                                    <li><strong>D-pad:</strong> Fijne bewegingscontrole</li>
+                                </ul>
+                            </div>
+                            <div class="control-group">
+                                <h4>Acties</h4>
+                                <ul>
+                                    <li><strong>A knop:</strong> Rood licht</li>
+                                    <li><strong>B knop:</strong> Blauw licht</li>
+                                    <li><strong>X knop:</strong> Groen licht</li>
+                                    <li><strong>Y knop:</strong> Geel licht</li>
+                                    <li><strong>LT/RT:</strong> Trucjes</li>
+                                    <li><strong>Xbox knop:</strong> Stop/Reset</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="gamepad-feedback" id="gamepad-feedback">
+                            <p>Wachtend op gamepad input...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Manual Controls Section -->
+            <section class="card manual-controls">
+                <div class="card__header">
+                    <h2>Handmatige Bediening</h2>
+                </div>
+                <div class="card__body">
+                    <div class="control-grid">
+                        <div class="control-group">
+                            <h4>Kleuren</h4>
+                            <div class="color-buttons">
+                                <button class="btn btn--sm color-btn" data-color="rood" style="background-color: #ff0000;">Rood</button>
+                                <button class="btn btn--sm color-btn" data-color="blauw" style="background-color: #0000ff;">Blauw</button>
+                                <button class="btn btn--sm color-btn" data-color="groen" style="background-color: #00ff00;">Groen</button>
+                                <button class="btn btn--sm color-btn" data-color="geel" style="background-color: #ffff00;">Geel</button>
+                                <button class="btn btn--sm color-btn" data-color="roze" style="background-color: #ff00ff;">Roze</button>
+                                <button class="btn btn--sm color-btn" data-color="cyaan" style="background-color: #00ffff;">Cyaan</button>
+                                <button class="btn btn--sm color-btn" data-color="wit" style="background-color: #ffffff;">Wit</button>
+                                <button class="btn btn--sm color-btn" data-color="uit" style="background-color: #000000; color: white;">Uit</button>
+                            </div>
+                        </div>
+
+                        <div class="control-group">
+                            <h4>Bewegingen</h4>
+                            <div class="movement-controls">
+                                <div class="dpad">
+                                    <button class="btn btn--outline dpad-btn" data-direction="forward">↑</button>
+                                    <div class="dpad-middle">
+                                        <button class="btn btn--outline dpad-btn" data-direction="left">←</button>
+                                        <button class="btn btn--outline dpad-btn" data-direction="stop">■</button>
+                                        <button class="btn btn--outline dpad-btn" data-direction="right">→</button>
+                                    </div>
+                                    <button class="btn btn--outline dpad-btn" data-direction="backward">↓</button>
+                                </div>
+                                <div class="speed-control">
+                                    <label for="speed-slider" class="form-label">Snelheid:</label>
+                                    <input type="range" id="speed-slider" class="form-control" min="0" max="255" value="128">
+                                    <span id="speed-value">128</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="control-group">
+                            <h4>Trucjes</h4>
+                            <div class="trick-buttons">
+                                <button class="btn btn--outline trick-btn" data-trick="spin">Draaien</button>
+                                <button class="btn btn--outline trick-btn" data-trick="shake">Schudden</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="app-footer">
+            <p>Zorg ervoor dat je browser Web Bluetooth en Gamepad API ondersteunt.</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
