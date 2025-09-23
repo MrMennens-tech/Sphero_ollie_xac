@@ -56,25 +56,33 @@ export class Ollie {
     }
 
     async init() {
-        console.log('> Initializing Ollie...');
-        await this._writeCharacteristic(this.services.RADIO, this.characteristics.ANTIDOS, new Uint8Array('011i3'.split('').map(c => c.charCodeAt(0))));
-        console.log('> Wrote Anti DOS characteristic');
-        await this._writeCharacteristic(this.services.RADIO, this.characteristics.POWER, new Uint8Array([0x07]));
-        console.log('> Wrote TX Power characteristic');
-        await this._writeCharacteristic(this.services.RADIO, this.characteristics.WAKE, new Uint8Array([0x01]));
-        console.log('> Wrote Wake CPU characteristic');
-        
-        // --- NEW: Setup response listener ---
-        const service = await this.device.gatt.getPrimaryService(this.services.ROBOT);
-        this.controlCharacteristic = await service.getCharacteristic(this.characteristics.CONTROL);
-        this.controlCharacteristic.addEventListener('characteristicvaluechanged', this._handleResponse.bind(this));
-        await this.controlCharacteristic.startNotifications();
-        console.log('> Response listener activated.');
+        try {
+            console.log('> Initializing Ollie...');
+            await this._writeCharacteristic(this.services.RADIO, this.characteristics.ANTIDOS, new Uint8Array('011i3'.split('').map(c => c.charCodeAt(0))));
+            console.log('> Wrote Anti DOS characteristic');
+            await this._writeCharacteristic(this.services.RADIO, this.characteristics.POWER, new Uint8Array([0x07]));
+            console.log('> Wrote TX Power characteristic');
+            await this._writeCharacteristic(this.services.RADIO, this.characteristics.WAKE, new Uint8Array([0x01]));
+            console.log('> Wrote Wake CPU characteristic');
+            
+            console.log('> Setting up response listener...');
+            const service = await this.device.gatt.getPrimaryService(this.services.ROBOT);
+            this.controlCharacteristic = await service.getCharacteristic(this.characteristics.CONTROL);
+            
+            // Add listener BEFORE starting notifications for safety
+            this.controlCharacteristic.addEventListener('characteristicvaluechanged', this._handleResponse.bind(this));
+            await this.controlCharacteristic.startNotifications(); 
+            console.log('> Response listener activated.');
 
-        await this.setBackLed(0);
-        console.log('> Back LED set to off');
-        await this.setHeading(0);
-        console.log('> Heading set, device is ready!');
+            await this.setBackLed(0);
+            console.log('> Back LED set to off');
+            await this.setHeading(0);
+            console.log('> Heading set, device is ready!');
+        } catch (error) {
+            console.error(">>> CRITICAL ERROR during Ollie initialization:", error);
+            // Re-throw the error so the main app knows it failed
+            throw error;
+        }
     }
     
     // --- Public Command Methods ---
@@ -124,12 +132,7 @@ export class Ollie {
 
         // Check for async power notification (ID=0x01)
         if (data.length > 5 && data[2] === 0x01) {
-            const state = data[5];
             const voltage = value.getUint16(6, false) / 100.0; // big-endian
-            const chargeCount = value.getUint16(8, false);
-            
-            // console.log(`> Battery Response: State=${state}, Voltage=${voltage}, Charges=${chargeCount}`);
-            
             const minVoltage = 7.0, maxVoltage = 8.4;
             const percentage = Math.round(((voltage - minVoltage) / (maxVoltage - minVoltage)) * 100);
             const clampedPercentage = Math.max(0, Math.min(100, percentage));
@@ -149,7 +152,7 @@ export class Ollie {
     }
 
     async stopBatteryUpdates() {
-        if (!this.device || !this.device.gatt.connected) return;
+        if (!this.device || !this.device.gatt.connected || !this.controlCharacteristic) return;
         // Send command to disable power notifications
         await this._sendCommand(0x00, 0x21, new Uint8Array([0x00]));
         console.log('> Requested to stop battery updates.');
@@ -175,12 +178,10 @@ export class Ollie {
         packets.set([chk], 6 + data.byteLength);
 
         try {
-            // Re-use the characteristic we stored in init()
             if (this.controlCharacteristic) {
                 await this.controlCharacteristic.writeValue(packets);
             } else {
-                // Fallback for commands before init is fully complete
-                await this._writeCharacteristic(this.services.ROBOT, this.characteristics.CONTROL, packets);
+                console.error('Cannot send command: Control Characteristic not available.');
             }
         } catch (error) {
             console.error('Failed to send command:', error);
@@ -189,11 +190,10 @@ export class Ollie {
         }
     }
 
-    // This is now a fallback, direct writing is less efficient
     async _writeCharacteristic(serviceUID, characteristicUID, value) {
         if (!this.device?.gatt.connected) {
             console.error('Write failed: Not connected.');
-            return;
+            return Promise.reject(new Error('Device not connected'));
         }
         const service = await this.device.gatt.getPrimaryService(serviceUID);
         const characteristic = await service.getCharacteristic(characteristicUID);
