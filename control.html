@@ -125,10 +125,7 @@
                     console.log('Requesting Bluetooth device...');
                     updateOllieStatus('Zoeken...', 'connecting');
                     this.device = await navigator.bluetooth.requestDevice({
-                        filters: [
-                            { namePrefix: 'Ollie' },
-                            { services: ['22bb746f-2bb0-7554-2d6f-726568705327'] } // Main service UUID
-                        ],
+                        filters: [{ namePrefix: 'Ollie' }], // Back to the simpler, more reliable filter
                         optionalServices: [
                             '22bb746f-2bb0-7554-2d6f-726568705327', 
                             '22bb746f-2bbf-7554-2d6f-726568705327'
@@ -415,5 +412,6 @@
     </script>
 </body>
 </html>
+
 
 
