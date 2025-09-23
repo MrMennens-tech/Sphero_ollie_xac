@@ -1,50 +1,65 @@
-body {
-    font-family: 'Inter', sans-serif;
-}
+body { font-family: 'Inter', sans-serif; }
 
-.status-dot {
-    width: 1rem;
-    height: 1rem;
-    border-radius: 50%;
-    transition: background-color 0.3s ease;
-}
+.status-dot { width: 1rem; height: 1rem; border-radius: 50%; transition: background-color 0.3s ease; }
+.status-dot.disconnected { background-color: #ef4444; }
+.status-dot.connecting { background-color: #f59e0b; animation: pulse 1.5s infinite; }
+.status-dot.connected { background-color: #22c55e; }
 
-.status-dot.disconnected { background-color: #ef4444; } /* red-500 */
-.status-dot.connecting { background-color: #f59e0b; animation: pulse 1.5s infinite; } /* amber-500 */
-.status-dot.connected { background-color: #22c55e; } /* green-500 */
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
 .nipple.back { box-shadow: inset 0 0 10px rgba(0,0,0,0.5); }
-.nipple.front {
-    background: linear-gradient(145deg, #4b5563, #1f2937);
-    border: 2px solid #6b7280 !important;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.4);
-}
+.nipple.front { background: linear-gradient(145deg, #4b5563, #1f2937); border: 2px solid #6b7280 !important; box-shadow: 0 4px 6px rgba(0,0,0,0.4); }
 
 .settings-section { border-top: 1px solid #374151; padding-top: 1rem; }
 .setting-item { display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; }
+.settings-header { font-weight: 700; font-size: 1.125rem; color: #22d3ee; border-bottom: 1px solid #374151; padding-bottom: 0.5rem; margin-bottom: 0.75rem; }
 
-.color-input {
-    padding: 0.25rem; height: 2rem; width: 3.5rem;
-    background-color: #374151; border: 1px solid #4b5563;
-    cursor: pointer; border-radius: 0.5rem;
-}
+.color-input { padding: 0.25rem; height: 2rem; width: 3.5rem; background-color: #374151; border: 1px solid #4b5563; cursor: pointer; border-radius: 0.5rem; }
 input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
 input[type="color"]::-webkit-color-swatch { border: none; border-radius: 0.375rem; }
 
-/* NEW: Touch button styling */
-.touch-button {
-    padding: 0.75rem 1rem;
-    font-weight: 600;
-    border-radius: 0.5rem;
-    transition: background-color 0.2s;
-    user-select: none; /* Prevent text selection on long press */
+.info-box-grid { background-color: #1f2937; padding: 1rem; border-radius: 0.5rem; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1); display: grid; grid-template-columns: 1fr auto; gap: 0.75rem; align-items: center; }
+.info-pill { padding: 0.5rem; border-radius: 0.5rem; font-weight: 500; }
+
+/* Base button style */
+.btn { width: 100%; font-weight: 700; padding-top: 0.75rem; padding-bottom: 0.75rem; padding-left: 1rem; padding-right: 1rem; border-radius: 0.5rem; transition: background-color 0.2s, transform 0.1s; text-align: center; }
+.btn:active { transform: scale(0.98); }
+.btn-blue { background-color: #2563eb; hover:bg-blue-700; }
+.btn-red { background-color: #dc2626; hover:bg-red-700; }
+.btn-teal { background-color: #0d9488; hover:bg-teal-700; }
+.btn-gray { background-color: #4b5563; hover:bg-gray-600; }
+
+.touch-button { padding: 0.75rem 1rem; font-weight: 600; border-radius: 0.5rem; transition: background-color 0.2s; user-select: none; }
+.touch-button:active { transform: scale(0.98); }
+
+/* Config Modal Styles */
+.config-item { display: flex; justify-content: space-between; align-items: center; background-color: #374151; padding: 0.5rem; border-radius: 0.375rem; }
+.btn-config { background-color: #4f46e5; color: white; padding: 0.25rem 0.75rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 600; }
+.badge { background-color: #111827; padding: 0.25rem 0.5rem; border-radius: 1rem; font-family: monospace; font-size: 0.75rem; }
+
+/* NEW: Battery Indicator Styles */
+.battery-indicator {
+    width: 24px;
+    height: 12px;
+    border: 2px solid #9ca3af; /* gray-400 */
+    border-radius: 4px;
+    position: relative;
+    padding: 1px;
 }
-.touch-button:active {
-    transform: scale(0.98);
+.battery-indicator::after {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 6px;
+    background-color: #9ca3af; /* gray-400 */
+    right: -6px;
+    top: 2px;
+    border-radius: 0 2px 2px 0;
+}
+.battery-level {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease, background-color 0.5s ease;
+    background-color: #4ade80; /* green-400 */
 }
 
