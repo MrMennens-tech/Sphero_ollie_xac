@@ -25,6 +25,7 @@ export class Ollie {
             ANTIDOS: "22bb746f-2bbd-7554-2d6f-726568705327",
             POWER: "22bb746f-2bb2-7554-2d6f-726568705327", 
             WAKE: "22bb746f-2bbf-7554-2d6f-726568705327",
+            BATT_NOTIFICATION: '22bb746f-2bb1-7554-2d6f-726568705327',
         };
     }
 
@@ -110,26 +111,22 @@ export class Ollie {
     async startBatteryUpdates(callback) {
         if (!this.device || !this.device.gatt.connected) throw new Error("Device not connected.");
         try {
-            const service = await this.device.gatt.getPrimaryService(this.services.ROBOT);
-            const characteristic = await service.getCharacteristic('22bb746f-2bb1-7554-2d6f-726568705327'); // This is the correct notification characteristic
+            // CORRECTED: Battery info is on the RADIO service
+            const service = await this.device.gatt.getPrimaryService(this.services.RADIO);
+            const characteristic = await service.getCharacteristic(this.characteristics.BATT_NOTIFICATION);
 
             characteristic.addEventListener('characteristicvaluechanged', (event) => {
                 const value = event.target.value;
-                if (value.getUint8(0) === 0x8d && value.getUint8(1) === 0x0a && value.getUint8(4) === 0x13) {
-                    const voltage = value.getUint16(5, false) / 100.0; // big-endian
-                    const minVoltage = 7.0, maxVoltage = 8.4;
-                    const percentage = Math.round(((voltage - minVoltage) / (maxVoltage - minVoltage)) * 100);
-                    const clampedPercentage = Math.max(0, Math.min(100, percentage));
-                    if (callback) callback(clampedPercentage);
-                }
+                const voltage = value.getUint16(0, false) / 100.0; // big-endian
+                const minVoltage = 7.0, maxVoltage = 8.4;
+                const percentage = Math.round(((voltage - minVoltage) / (maxVoltage - minVoltage)) * 100);
+                const clampedPercentage = Math.max(0, Math.min(100, percentage));
+                if (callback) callback(clampedPercentage);
             });
 
             await characteristic.startNotifications();
-            console.log('> Started listening for response notifications.');
+            console.log('> Started listening for battery notifications.');
             
-            const did = 0x00, cid = 0x21, data = new Uint8Array([0x01]);
-            await this._sendCommand(did, cid, data);
-            console.log('> Enabled power notifications on Ollie.');
         } catch (error) {
             console.error('Failed to start battery updates.', error);
             throw error;
@@ -139,11 +136,12 @@ export class Ollie {
     async stopBatteryUpdates() {
         if (!this.device || !this.device.gatt.connected) return;
         try {
-            const service = await this.device.gatt.getPrimaryService(this.services.ROBOT);
-            const characteristic = await service.getCharacteristic('22bb746f-2bb1-7554-2d6f-726568705327');
+            // CORRECTED: Battery info is on the RADIO service
+            const service = await this.device.gatt.getPrimaryService(this.services.RADIO);
+            const characteristic = await service.getCharacteristic(this.characteristics.BATT_NOTIFICATION);
             if (characteristic.properties.notify) {
                 await characteristic.stopNotifications();
-                console.log('> Stopped listening for response notifications.');
+                console.log('> Stopped listening for battery notifications.');
             }
         } catch (error) {
             console.warn('Could not stop battery notifications.', error);
