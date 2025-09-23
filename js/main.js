@@ -26,10 +26,6 @@ let aimButtonPressTime = 0;
 let lastAimHeading = 0;
 const AIM_HOLD_DURATION = 3000; // 3 seconds
 
-// --- NEW: Throttle for drive commands to prevent GATT errors ---
-let lastCommandTime = 0;
-const COMMAND_THROTTLE_MS = 50; // Send a max of one command every 50ms
-
 // --- UI Update Functions ---
 function updateOllieStatus(text, statusClass) {
     ollieStatus.textContent = `Ollie: ${text}`;
@@ -176,14 +172,15 @@ function gameLoop() {
     const gp = navigator.getGamepads()[gamepadIndex];
     if (!gp) return;
 
-    // --- NEW: Debug log for all button values ---
+    // --- Debug log for all button values ---
     const buttonDebug = gp.buttons.map((b, i) => `B${i}:${b.value.toFixed(2)}`).join(' ');
     console.log(`DEBUG: ${buttonDebug}`);
     // ---------------------------------------------
 
     const TRIGGER_THRESHOLD = 0.5;
+    // CORRECTED: Check index 6 for the trigger value
     const currentButtonStates = gp.buttons.map((button, index) => ({
-        pressed: (index === 5) ? button.value > TRIGGER_THRESHOLD : button.pressed,
+        pressed: (index === 6) ? button.value > TRIGGER_THRESHOLD : button.pressed,
         value: button.value
     }));
     
@@ -219,8 +216,9 @@ function gameLoop() {
     if (isAiming) {
         handleAiming(gp);
     } else {
-         const comboPressed = currentButtonStates[4].pressed && currentButtonStates[5].pressed;
-        const prevComboPressed = previousButtonStates[4].pressed && previousButtonStates[5].pressed;
+        // CORRECTED: Check buttons 4 and 6 for combo
+        const comboPressed = currentButtonStates[4].pressed && currentButtonStates[6].pressed;
+        const prevComboPressed = previousButtonStates[4].pressed && previousButtonStates[6].pressed;
         if (comboPressed && !prevComboPressed) {
             isTrickMode = !isTrickMode;
             updateModeIndicator();
@@ -232,7 +230,8 @@ function gameLoop() {
             if (currentButtonStates[3].pressed && !previousButtonStates[3].pressed) doTrick('spinRight');
         } else {
             if (currentButtonStates[4].pressed && !previousButtonStates[4].pressed) changeMaxSpeed(-0.1);
-            if (currentButtonStates[5].pressed && !previousButtonStates[5].pressed) changeMaxSpeed(0.1);
+            // CORRECTED: Check button 6 for speed up
+            if (currentButtonStates[6].pressed && !previousButtonStates[6].pressed) changeMaxSpeed(0.1);
             if (currentButtonStates[0].pressed && !previousButtonStates[0].pressed) applyColor(255, 0, 0);
             if (currentButtonStates[2].pressed && !previousButtonStates[2].pressed) applyColor(0, 255, 0);
             if (currentButtonStates[3].pressed && !previousButtonStates[3].pressed) applyColor(255, 255, 0);
@@ -241,24 +240,17 @@ function gameLoop() {
             const y = -gp.axes[1];
             const deadzone = 0.15;
             const magnitude = Math.sqrt(x * x + y * y);
-            const now = Date.now();
 
             if (magnitude > deadzone) {
-                // --- MODIFIED: Throttle drive commands ---
-                if (now - lastCommandTime > COMMAND_THROTTLE_MS) {
-                    isDriving = true;
-                    const speed = Math.min(Math.floor(((magnitude - deadzone) / (1 - deadzone)) * 255), 255);
-                    let heading = Math.atan2(x, y) * (180 / Math.PI);
-                    if (heading < 0) heading += 360;
-                    
-                    ollie.drive(Math.round(heading), Math.round(speed * maxSpeed));
-                    lastCommandTime = now;
-                }
+                isDriving = true;
+                const speed = Math.min(Math.floor(((magnitude - deadzone) / (1 - deadzone)) * 255), 255);
+                let heading = Math.atan2(x, y) * (180 / Math.PI);
+                if (heading < 0) heading += 360;
+                
+                ollie.drive(Math.round(heading), Math.round(speed * maxSpeed));
             } else if (isDriving) {
-                // --- MODIFIED: Send brake command immediately ---
-                ollie.drive(ollie.currentHeading, 0);
+                ollie.drive(ollie.currentHeading, 0); // This will now go through the queue correctly
                 isDriving = false;
-                lastCommandTime = now; // Reset timer after braking
             }
         }
     }
@@ -270,7 +262,14 @@ function gameLoop() {
 // --- Event Listeners ---
 connectButton.addEventListener('click', async () => {
     if (ollie.device && ollie.device.gatt.connected) {
-        ollie.disconnect();
+        try {
+            console.log('Putting Ollie to sleep before disconnecting...');
+            await ollie.sleep();
+            ollie.disconnect(); // Disconnect immediately after sleep command is sent
+        } catch (error) {
+            console.error('Failed to send sleep command, disconnecting anyway.', error);
+            ollie.disconnect();
+        }
     } else {
         try {
             updateOllieStatus('Zoeken...', 'connecting');
