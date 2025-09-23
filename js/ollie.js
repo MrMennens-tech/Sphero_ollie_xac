@@ -11,12 +11,11 @@ export class Ollie {
     async connect() {
         console.log('Requesting Bluetooth device...');
         
-        // This is a more robust filter. It looks for devices that EITHER
-        // have the name "Ollie" OR broadcast the official Sphero service UUID.
-        // This should solve the connection issue.
+        // CORRECTED FILTER: This now ONLY looks for the official Sphero service UUID.
+        // It will find any compatible Sphero robot (like Ollie) regardless of its broadcast name (e.g., "2B-96A7").
+        // This should permanently fix the connection issue.
         this.device = await navigator.bluetooth.requestDevice({
             filters: [
-                { namePrefix: 'Ollie' },
                 { services: ['22bb746f-2bb0-7554-2d6f-726568705327'] }
             ],
             optionalServices: [
@@ -102,3 +101,4 @@ export class Ollie {
         await this.sendCommand(0x02, 0x33, [leftMode, leftSpeed, rightMode, rightSpeed]);
     }
 }
+
