@@ -5,8 +5,94 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ollie Web Controller</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="css/style.css">
     <link rel="icon" type="image/x-icon" href="img/favicon.ico">
+    <style>
+        /* General Styling */
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Status & Info Boxes */
+        .status-box {
+            display: flex;
+            align-items: center;
+            background-color: rgba(30, 41, 59, 0.8); /* slate-800 with opacity */
+            padding: 1rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        .status-dot {
+            width: 1rem;
+            height: 1rem;
+            border-radius: 9999px;
+            margin-right: 0.75rem;
+            flex-shrink: 0;
+        }
+        .status-dot.disconnected { background-color: #ef4444; } /* red-500 */
+        .status-dot.connecting { background-color: #f59e0b; } /* amber-500 */
+        .status-dot.connected { background-color: #22c55e; } /* green-500 */
+
+        /* Buttons */
+        .btn-secondary {
+            background-color: #475569; /* slate-600 */
+            color: #f8fafc; /* slate-50 */
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: background-color 0.2s, transform 0.2s;
+        }
+        .btn-secondary:hover {
+            background-color: #64748b; /* slate-500 */
+            transform: scale(1.03);
+        }
+
+        .btn-touch {
+            background-color: #334155; /* slate-700 */
+            color: #f1f5f9; /* slate-100 */
+            padding: 1rem;
+            border-radius: 0.75rem;
+            font-size: 1.125rem;
+            font-weight: 600;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transition: background-color 0.2s, transform 0.2s;
+        }
+        .btn-touch:hover {
+            background-color: #475569; /* slate-600 */
+            transform: translateY(-2px);
+        }
+
+        .btn-config {
+             background-color: #475569; /* slate-600 */
+             color: white;
+             padding: 0.75rem;
+             border-radius: 0.5rem;
+             font-weight: 500;
+             transition: background-color 0.2s;
+        }
+        .btn-config:hover {
+            background-color: #14b8a6; /* teal-500 */
+        }
+
+        /* Modal & Color Styling */
+        input[type="color"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 2.5rem;
+            border: none;
+            padding: 0;
+            border-radius: 0.5rem;
+            cursor: pointer;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border-radius: 0.5rem;
+            border: 2px solid #475569; /* slate-600 */
+        }
+    </style>
 </head>
 <body class="bg-slate-900 text-white font-sans flex flex-col min-h-screen">
 
@@ -74,6 +160,16 @@
                  <div id="speed-indicator" class="w-full text-center p-3 rounded-lg font-medium text-lg shadow-lg bg-slate-800">Max Snelheid: 20%</div>
             </div>
              <div id="settings-panel" class="space-y-4">
+                <!-- Color pickers moved here -->
+                <div class="space-y-2">
+                    <h3 class="text-lg font-semibold text-center text-slate-300">Kleuren Knoppen</h3>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 items-center">
+                         <label for="color-x1" class="text-center">X1 (A)</label><input type="color" id="color-x1" value="#ff0000">
+                         <label for="color-x2" class="text-center">X2 (B)</label><input type="color" id="color-x2" value="#0000ff">
+                         <label for="color-x3" class="text-center">X3 (X)</label><input type="color" id="color-x3" value="#00ff00">
+                         <label for="color-x4" class="text-center">X4 (Y)</label><input type="color" id="color-x4" value="#ffff00">
+                    </div>
+                </div>
                 <button id="open-config-button" class="btn-secondary w-full">Stel Controller In</button>
             </div>
         </div>
@@ -97,12 +193,6 @@
              <div>
                 <label for="deadzone-slider" class="block text-center text-slate-400 mb-2">Joystick Gevoeligheid</label>
                 <input id="deadzone-slider" type="range" min="0.1" max="0.8" step="0.05" value="0.4" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
-            </div>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 items-center">
-                 <label for="color-x1" class="text-center">X1 (A)</label><input type="color" id="color-x1" value="#ff0000" class="w-full h-10 rounded-lg">
-                 <label for="color-x2" class="text-center">X2 (B)</label><input type="color" id="color-x2" value="#0000ff" class="w-full h-10 rounded-lg">
-                 <label for="color-x3" class="text-center">X3 (X)</label><input type="color" id="color-x3" value="#00ff00" class="w-full h-10 rounded-lg">
-                 <label for="color-x4" class="text-center">X4 (Y)</label><input type="color" id="color-x4" value="#ffff00" class="w-full h-10 rounded-lg">
             </div>
             <button id="close-config-button" class="btn-secondary w-full">Sluiten</button>
         </div>
