@@ -125,7 +125,7 @@
                     console.log('Requesting Bluetooth device...');
                     updateOllieStatus('Zoeken...', 'connecting');
                     this.device = await navigator.bluetooth.requestDevice({
-                        filters: [{ namePrefix: 'Ollie' }], // Back to the simpler, more reliable filter
+                        filters: [{ namePrefix: 'Ollie' }], 
                         optionalServices: [
                             '22bb746f-2bb0-7554-2d6f-726568705327', 
                             '22bb746f-2bbf-7554-2d6f-726568705327'
@@ -168,7 +168,8 @@
 
             async init() {
                 console.log('Initializing Ollie...');
-                const useAntiDos = this.characteristics['22bb746f-2bbf-7554-2d6f-726568705327'];
+                // CORRECTED UUID HERE: was '...-2bbf-...', should be '...-2bb1-...'
+                const useAntiDos = this.characteristics['22bb746f-2bb1-7554-2d6f-726568705327'];
                 await useAntiDos.writeValue(new TextEncoder().encode('011i3'));
                 await this.wake();
             }
@@ -188,6 +189,7 @@
                 const checksum = (~((did + cid + sequence + dataLength + data.reduce((a, b) => a + b, 0)) & 0xFF)) & 0xFF;
                 const command = new Uint8Array([0xFF, 0xFF, did, cid, sequence, dataLength, ...data, checksum]);
                 try {
+                    // This is the correct characteristic for sending commands
                     await this.characteristics['22bb746f-2bb2-7554-2d6f-726568705327'].writeValue(command);
                 } catch (error) {
                     console.error('Error sending command:', error);
@@ -412,6 +414,4 @@
     </script>
 </body>
 </html>
-
-
 
