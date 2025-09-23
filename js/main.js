@@ -8,6 +8,7 @@ const speedIndicator = document.getElementById('speed-indicator'), modeIndicator
 const toggleTouchCheckbox = document.getElementById('toggle-touch-checkbox');
 const toggleExpertCheckbox = document.getElementById('toggle-expert-checkbox');
 const touchControlsPanel = document.getElementById('touch-controls'), touchTricksPanel = document.getElementById('touch-tricks');
+const joystickZone = document.getElementById('joystick-zone');
 const openConfigButton = document.getElementById('open-config-button'), configModal = document.getElementById('config-modal'), closeConfigButton = document.getElementById('close-config-button');
 const configInstructions = document.getElementById('config-instructions');
 const deadzoneSlider = document.getElementById('deadzone-slider');
@@ -27,6 +28,7 @@ const AIM_HOLD_DURATION = 3000;
 let joystickDeadzone = 0.4;
 let stopCommandInterval = null;
 let trickModeLEDInterval = null;
+let isEmergencyStopped = false;
 
 // --- Controller Configuration ---
 let buttonMappings = { SPEED_UP: 4, SPEED_DOWN: 6, COLOR_X1: 2, COLOR_X2_AIM: 3, COLOR_X3: 0, COLOR_X4: 1, CYCLE_MODE: 10 };
@@ -61,6 +63,29 @@ function updateModeIndicator() {
     updateUI(modeIndicator, `Modus: ${text}`, `w-full text-center p-3 rounded-lg font-medium text-lg shadow-lg ${className}`);
     touchTricksPanel.classList.toggle('hidden', currentMode !== 'trick');
 }
+
+// --- On-screen Joystick ---
+const joystickManager = nipplejs.create({ 
+    zone: joystickZone, 
+    mode: 'static', 
+    position: { left: '50%', top: '50%' }, 
+    color: 'white', 
+    size: 150 
+});
+
+joystickManager.on('move', (evt, data) => {
+    if (!ollie.device || gamepadIndex !== null || currentMode === 'trick' || isAiming) return;
+    const speed = Math.min(Math.floor(data.distance * 3), 255);
+    const heading = Math.round(data.angle.degree);
+    let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
+    ollie.drive(heading, Math.round(speed * Math.min(maxSpeed, speedCap)));
+    isDriving = true;
+});
+
+joystickManager.on('end', () => { 
+    if (isDriving) { ollie.drive(0, 0); isDriving = false; } 
+});
+
 
 // --- Core Logic ---
 function changeMaxSpeed(amount) { maxSpeed = Math.max(0.1, maxSpeed + SPEED_STEP * amount); updateSpeedIndicator(); applyColor(currentColor.r, currentColor.g, currentColor.b, true); };
@@ -125,6 +150,11 @@ function gameLoop() {
         return;
     }
     
+    if (isEmergencyStopped) {
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+
     const currentButtonStates = gp.buttons.map(b => b.pressed || b.value > 0.5);
 
     if (isWaitingForInput) {
@@ -167,7 +197,7 @@ function gameLoop() {
                 console.log("Aiming finished, turning off LED.");
                 isAiming = false;
                 ollie.setHeading(lastAimHeading);
-                ollie.setBackLed(0); // Ensure LED is turned off
+                ollie.setBackLed(0);
                 ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
                 updateModeIndicator();
             }
@@ -184,6 +214,10 @@ function gameLoop() {
 
             const x = gp.axes[0], y = -gp.axes[1], magnitude = Math.sqrt(x * x + y * y);
             if (magnitude > joystickDeadzone) {
+                if (isEmergencyStopped) {
+                    isEmergencyStopped = false;
+                    console.log("Emergency stop reset by joystick movement.");
+                }
                 isDriving = true;
                 if(stopCommandInterval) { clearInterval(stopCommandInterval); stopCommandInterval = null; }
                 let speed = (magnitude > 0.9) ? 255 : (magnitude > 0.65) ? 170 : 85;
@@ -204,6 +238,7 @@ function gameLoop() {
 // --- Event Listeners ---
 connectButton.addEventListener('click', async () => {
     if (ollie.device?.gatt.connected) {
+        isEmergencyStopped = false;
         if (trickModeLEDInterval) clearInterval(trickModeLEDInterval);
         try { 
             await ollie.sleep(); 
@@ -245,10 +280,30 @@ document.querySelector('[data-trick="spinRight"]').addEventListener('touchstart'
 document.querySelector('[data-trick="flipForward"]').addEventListener('touchstart', (e) => { e.preventDefault(); doTrick('flipForward'); });
 document.querySelector('[data-trick="flipBackward"]').addEventListener('touchstart', (e) => { e.preventDefault(); doTrick('flipBackward'); });
 
-emergencyStopButton.addEventListener('click', () => { if(ollie.device?.gatt.connected) { console.log("EMERGENCY STOP"); ollie.stop(); }});
-let aimTouchTimeout;
-document.getElementById('touch-aim').addEventListener('touchstart', (e) => { e.preventDefault(); aimButtonPressTime = Date.now(); aimTouchTimeout = setTimeout(() => { isAiming = true; ollie.setBackLed(255); updateModeIndicator(); }, AIM_HOLD_DURATION); });
-document.getElementById('touch-aim').addEventListener('touchend', (e) => { e.preventDefault(); clearTimeout(aimTouchTimeout); if(isAiming) { isAiming = false; ollie.setHeading(ollie.currentHeading); ollie.setBackLed(0); updateModeIndicator(); } });
+emergencyStopButton.addEventListener('click', () => { 
+    if(ollie.device?.gatt.connected) {
+        console.log("EMERGENCY STOP ACTIVATED");
+        isEmergencyStopped = true;
+        ollie.stop();
+    }
+});
+
+// Corrected Touch Aim logic (no delay)
+document.getElementById('touch-aim').addEventListener('touchstart', (e) => { 
+    e.preventDefault(); 
+    isAiming = true; 
+    ollie.setBackLed(255); 
+    updateModeIndicator(); 
+});
+document.getElementById('touch-aim').addEventListener('touchend', (e) => { 
+    e.preventDefault(); 
+    if(isAiming) { 
+        isAiming = false; 
+        ollie.setHeading(ollie.currentHeading); // Use last heading from joystick
+        ollie.setBackLed(0); 
+        updateModeIndicator(); 
+    } 
+});
 
 openConfigButton.addEventListener('click', () => configModal.classList.remove('hidden'));
 closeConfigButton.addEventListener('click', () => { configModal.classList.add('hidden'); isWaitingForInput = false; configInstructions.textContent = 'Kies een actie en druk de gewenste knop in je controller.'; });
