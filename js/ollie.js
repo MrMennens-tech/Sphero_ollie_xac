@@ -10,6 +10,7 @@ export class Ollie {
         this.sequence = 0;
         this.isBusy = false; // Command queue flag
         this.currentHeading = 0;
+        this.batteryUpdateInterval = null; // To store the interval ID
 
         this.Motors = {
             off: 0x00, forward: 0x01, reverse: 0x02,
@@ -23,7 +24,7 @@ export class Ollie {
         this.characteristics = {
             CONTROL: "22bb746f-2ba1-7554-2d6f-726568705327",
             ANTIDOS: "22bb746f-2bbd-7554-2d6f-726568705327",
-            POWER: "22bb746f-2bb2-7554-2d6f-726568705327", 
+            POWER: "22bb746f-2bb2-7554-2d6f-726568705327",
             WAKE: "22bb746f-2bbf-7554-2d6f-726568705327",
             BATT_NOTIFICATION: '22bb746f-2bb1-7554-2d6f-726568705327',
         };
@@ -47,6 +48,7 @@ export class Ollie {
 
     onDisconnected() {
         console.log('--- OLLIE DISCONNECTED --- Device object is now null.');
+        this.stopBatteryUpdates(); // Stop polling when disconnected
         this.device = null;
         if (this.onDisconnectedCallback) {
             this.onDisconnectedCallback();
@@ -108,43 +110,47 @@ export class Ollie {
         this.device.gatt.disconnect();
     }
     
-    async startBatteryUpdates(callback) {
-        if (!this.device || !this.device.gatt.connected) throw new Error("Device not connected.");
-        try {
-            // CORRECTED: Battery info is on the RADIO service
+    // --- MODIFIED: Battery Polling instead of Notifications ---
+    async _readBatteryLevel(callback) {
+         if (!this.device || !this.device.gatt.connected) return;
+         try {
             const service = await this.device.gatt.getPrimaryService(this.services.RADIO);
             const characteristic = await service.getCharacteristic(this.characteristics.BATT_NOTIFICATION);
-
-            characteristic.addEventListener('characteristicvaluechanged', (event) => {
-                const value = event.target.value;
-                const voltage = value.getUint16(0, false) / 100.0; // big-endian
-                const minVoltage = 7.0, maxVoltage = 8.4;
-                const percentage = Math.round(((voltage - minVoltage) / (maxVoltage - minVoltage)) * 100);
-                const clampedPercentage = Math.max(0, Math.min(100, percentage));
-                if (callback) callback(clampedPercentage);
-            });
-
-            await characteristic.startNotifications();
-            console.log('> Started listening for battery notifications.');
+            const value = await characteristic.readValue();
             
-        } catch (error) {
-            console.error('Failed to start battery updates.', error);
-            throw error;
-        }
+            const voltage = value.getUint16(0, false) / 100.0; // big-endian
+            const minVoltage = 7.0, maxVoltage = 8.4;
+            const percentage = Math.round(((voltage - minVoltage) / (maxVoltage - minVoltage)) * 100);
+            const clampedPercentage = Math.max(0, Math.min(100, percentage));
+            if (callback) callback(clampedPercentage);
+
+         } catch (error) {
+            console.error("Could not read battery level.", error);
+            if (callback) callback(null); // Report null on error
+         }
     }
 
-    async stopBatteryUpdates() {
-        if (!this.device || !this.device.gatt.connected) return;
-        try {
-            // CORRECTED: Battery info is on the RADIO service
-            const service = await this.device.gatt.getPrimaryService(this.services.RADIO);
-            const characteristic = await service.getCharacteristic(this.characteristics.BATT_NOTIFICATION);
-            if (characteristic.properties.notify) {
-                await characteristic.stopNotifications();
-                console.log('> Stopped listening for battery notifications.');
-            }
-        } catch (error) {
-            console.warn('Could not stop battery notifications.', error);
+    async startBatteryUpdates(callback) {
+        if (!this.device || !this.device.gatt.connected) throw new Error("Device not connected.");
+        
+        // Stop any existing interval
+        if (this.batteryUpdateInterval) {
+            clearInterval(this.batteryUpdateInterval);
+        }
+
+        // Read once immediately, then start polling
+        await this._readBatteryLevel(callback); 
+        this.batteryUpdateInterval = setInterval(() => {
+            this._readBatteryLevel(callback);
+        }, 30000); // Poll every 30 seconds
+        console.log('> Started polling for battery updates.');
+    }
+
+    stopBatteryUpdates() {
+        if (this.batteryUpdateInterval) {
+            clearInterval(this.batteryUpdateInterval);
+            this.batteryUpdateInterval = null;
+            console.log('> Stopped polling for battery updates.');
         }
     }
 
