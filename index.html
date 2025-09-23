@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="nl" class="h-full bg-gray-900 text-white">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sphero Ollie Web + Gamepad Controller</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Google Fonts -->
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+</head>
+<body class="h-full flex flex-col items-center justify-center p-4 space-y-4">
+
+    <div class="text-center">
+        <h1 class="text-4xl font-bold">Sphero Ollie Controller</h1>
+        <p class="text-gray-400 mt-2">Bestuur je Ollie via het scherm of met een USB Gamepad.</p>
+    </div>
+
+    <!-- Status Indicators -->
+    <div class="flex items-center space-x-8 bg-gray-800 p-4 rounded-lg">
+        <div class="flex items-center space-x-3">
+            <span id="ollie-status-dot" class="status-dot disconnected"></span>
+            <span id="ollie-status" class="font-medium">Ollie: Niet verbonden</span>
+        </div>
+        <div class="flex items-center space-x-3">
+            <span id="gamepad-status-dot" class="status-dot disconnected"></span>
+            <span id="gamepad-status" class="font-medium">Gamepad: Niet verbonden</span>
+        </div>
+    </div>
+
+    <!-- Main Controls -->
+    <div class="flex flex-col md:flex-row items-center justify-center gap-8 mt-4">
+        <!-- On-screen Joystick -->
+        <div class="flex flex-col items-center space-y-4">
+             <h2 class="text-lg font-semibold">Scherm-joystick</h2>
+            <div id="joystick-zone"></div>
+        </div>
+
+        <!-- Connection and other Controls -->
+        <div class="flex flex-col items-center space-y-4">
+            <button id="connect-button" class="w-48 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105">
+                Verbind met Ollie
+            </button>
+            <div class="flex flex-col items-center space-y-2">
+                <label for="color-picker" class="font-semibold">Kies een kleur</label>
+                <input type="color" id="color-picker" value="#00BFFF" class="w-24 h-12 p-1 bg-gray-800 rounded-lg cursor-pointer">
+            </div>
+             <div id="speed-indicator" class="w-48 text-center bg-gray-700 p-2 rounded-lg font-medium">Max Snelheid: 100%</div>
+             <div id="mode-indicator" class="w-48 text-center bg-indigo-600 p-2 rounded-lg font-medium">Modus: Normaal</div>
+        </div>
+    </div>
+    
+    <!-- Instructions -->
+    <div class="max-w-xl text-center text-gray-400 text-sm p-4 bg-gray-800 rounded-lg mt-4">
+        <h3 class="font-bold text-white mb-2">Gamepad Besturing</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+            <div>
+                <p class="font-bold text-white">Normale Modus:</p>
+                <p>X1 (A): LED Rood</p>
+                <p>X2 (B): LED Blauw</p>
+                <p>X3 (X): LED Groen</p>
+                <p>X4 (Y): LED Geel</p>
+                <p>X5 (LB): Snelheid omlaag</p>
+                <p>X6 (RB): Snelheid omhoog</p>
+            </div>
+            <div>
+                <p class="font-bold text-white">Trick Modus:</p>
+                <p>X1 (A): Spin links</p>
+                <p>X2 (B): Flip vooruit</p>
+                <p>X3 (X): Flip achteruit</p>
+                <p>X4 (Y): Spin rechts</p>
+                <p class="mt-2"><span class="font-bold text-white">Wissel Modus:</span> Druk X5 (LB) + X6 (RB) tegelijk in.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript libraries and modules -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
