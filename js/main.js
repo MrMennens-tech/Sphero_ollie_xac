@@ -1,4 +1,4 @@
-import { Ollie } from './ollie.js';
+import { Ollie } from './ollie.js'; 
 
 // --- DOM Elements ---
 const connectButton = document.getElementById('connect-button');
