@@ -10,7 +10,8 @@
 </head>
 <body class="bg-gray-800 text-white flex flex-col items-center justify-center min-h-screen p-4 font-sans">
 
-    <div class="w-full max-w-4xl bg-gray-900 rounded-2xl shadow-lg p-6 space-y-6">
+    <!-- Main App Container -->
+    <div id="app-container" class="w-full max-w-4xl bg-gray-900 rounded-2xl shadow-lg p-6 space-y-6">
         
         <header class="text-center">
             <h1 class="text-3xl font-bold text-cyan-400">Ollie Advanced Controller</h1>
@@ -22,60 +23,74 @@
             
             <!-- Left Side: Connection & Joystick -->
             <div class="flex flex-col items-center space-y-4">
-                <button id="connect-button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors text-lg shadow-md">
-                    Verbind met Ollie
-                </button>
-                <!-- Joystick is now hidden by default -->
+                <button id="connect-button" class="btn btn-blue">Verbind met Ollie</button>
                 <div id="joystick-zone" class="relative w-64 h-64 bg-gray-700 rounded-full border-4 border-gray-600 shadow-inner hidden"></div>
-                <button id="toggle-touch-button" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-lg transition-colors text-lg shadow-md">
-                    Activeer Touch Modus
-                </button>
+                <button id="toggle-touch-button" class="btn btn-teal">Activeer Touch Modus</button>
+                <button id="open-config-button" class="btn btn-gray">Stel Controller In</button>
             </div>
 
             <!-- Right Side: Status & Settings -->
             <div class="space-y-4">
-                <div class="bg-gray-800 p-4 rounded-lg shadow-md space-y-3">
-                    <div class="flex items-center justify-between">
-                        <span id="ollie-status" class="font-medium">Ollie: Niet verbonden</span>
-                        <div id="ollie-status-dot" class="status-dot disconnected"></div>
-                    </div>
-                    <div class="flex items-center justify-between">
-                        <span id="gamepad-status" class="font-medium">Gamepad: Niet verbonden</span>
-                        <div id="gamepad-status-dot" class="status-dot disconnected"></div>
+                <div class="info-box-grid">
+                    <span id="ollie-status">Ollie: Niet verbonden</span><div id="ollie-status-dot" class="status-dot disconnected"></div>
+                    <span id="gamepad-status">Gamepad: Niet verbonden</span><div id="gamepad-status-dot" class="status-dot disconnected"></div>
+                    <!-- NEW: Battery Indicator -->
+                    <span id="ollie-battery">Batterij: --%</span>
+                    <div class="battery-indicator">
+                        <div id="battery-level" class="battery-level"></div>
                     </div>
                 </div>
                 <div class="bg-gray-800 p-4 rounded-lg shadow-md grid grid-cols-2 gap-4 text-center">
-                    <div id="speed-indicator" class="bg-indigo-600 p-2 rounded-lg font-medium">Max Snelheid: 20%</div>
-                    <div id="mode-indicator" class="bg-indigo-600 p-2 rounded-lg font-medium">Modus: Normaal</div>
+                    <div id="speed-indicator" class="info-pill bg-indigo-600">Max Snelheid: 20%</div>
+                    <div id="mode-indicator" class="info-pill bg-indigo-600">Modus: Normaal</div>
                 </div>
                 <div class="bg-gray-800 p-4 rounded-lg shadow-md space-y-3 settings-section">
-                    <h3 class="font-bold text-lg text-cyan-400 border-b border-gray-700 pb-2 mb-3">Kleuren</h3>
+                    <h3 class="settings-header">Kleuren</h3>
                     <div class="setting-item"><label for="color-x1">X1 (A)</label><input type="color" id="color-x1" value="#ff0000" class="color-input"></div>
                     <div class="setting-item"><label for="color-x3">X3 (X)</label><input type="color" id="color-x3" value="#00ff00" class="color-input"></div>
                     <div class="setting-item"><label for="color-x4">X4 (Y)</label><input type="color" id="color-x4" value="#ffff00" class="color-input"></div>
                     <div class="setting-item"><label for="color-x2">X2 (B)</label><input type="color" id="color-x2" value="#0000ff" class="color-input"></div>
                 </div>
-                <button id="full-power-button" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg transition-colors text-lg shadow-md">
-                    Full Power: UIT
-                </button>
             </div>
         </div>
 
-        <!-- NEW: Touch Controls Panel (hidden by default) -->
+        <!-- Touch Controls Panel (hidden by default) -->
         <div id="touch-controls" class="hidden bg-gray-800 p-4 rounded-lg space-y-4">
-             <h3 class="font-bold text-lg text-cyan-400 text-center">Touch Bediening</h3>
-             <div class="grid grid-cols-2 gap-4">
-                <button id="touch-speed-down" class="touch-button bg-blue-600">Snelheid -</button>
-                <button id="touch-speed-up" class="touch-button bg-blue-600">Snelheid +</button>
-                <button id="touch-trick-mode" class="touch-button bg-purple-600">Trick Modus</button>
-                <button id="touch-aim" class="touch-button bg-yellow-600">Aim (3s vasthouden)</button>
+             <h3 class="settings-header text-center">Touch Bediening</h3>
+             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <button data-action="speed-down" class="touch-button bg-blue-600">Snelheid -</button>
+                <button data-action="speed-up" class="touch-button bg-blue-600">Snelheid +</button>
+                <button data-action="cycle-mode" class="touch-button bg-purple-600">Wissel Modus</button>
+                <button id="touch-aim" class="touch-button bg-yellow-600">Aim (3s)</button>
              </div>
-             <div id="touch-tricks" class="hidden grid grid-cols-2 gap-4">
-                <button id="touch-spin-left" class="touch-button bg-purple-700">Spin Links</button>
-                <button id="touch-spin-right" class="touch-button bg-purple-700">Spin Rechts</button>
-                <button id="touch-flip-fwd" class="touch-button bg-purple-700">Flip Vooruit</button>
-                <button id="touch-flip-bwd" class="touch-button bg-purple-700">Flip Achteruit</button>
+             <div id="touch-tricks" class="hidden grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-700">
+                <button data-trick="spinLeft" class="touch-button bg-purple-700">Spin Links</button>
+                <button data-trick="spinRight" class="touch-button bg-purple-700">Spin Rechts</button>
+                <button data-trick="flipForward" class="touch-button bg-purple-700">Flip Vooruit</button>
+                <button data-trick="flipBackward" class="touch-button bg-purple-700">Flip Achteruit</button>
              </div>
+        </div>
+    </div>
+
+    <!-- Controller Configuration Modal -->
+    <div id="config-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md space-y-4">
+            <h2 class="text-2xl font-bold text-cyan-400">Controller Instellen</h2>
+            <p id="config-instructions" class="text-center text-yellow-400 h-6">Druk op een knop om te koppelen...</p>
+            <div class="space-y-2 text-sm">
+                <div class="config-item"><span class="w-2/5">Snelheid -</span><button class="btn-config" data-action="SPEED_DOWN">Instellen</button><span class="badge" id="map-SPEED_DOWN">B4</span></div>
+                <div class="config-item"><span class="w-2/5">Snelheid +</span><button class="btn-config" data-action="SPEED_UP">Instellen</button><span class="badge" id="map-SPEED_UP">B6 (Trigger)</span></div>
+                <div class="config-item"><span class="w-2/5">Kleur X1 (A)</span><button class="btn-config" data-action="COLOR_X1">Instellen</button><span class="badge" id="map-COLOR_X1">B2</span></div>
+                <div class="config-item"><span class="w-2/5">Kleur X2 (B) / Aim</span><button class="btn-config" data-action="COLOR_X2_AIM">Instellen</button><span class="badge" id="map-COLOR_X2_AIM">B3</span></div>
+                <div class="config-item"><span class="w-2/5">Kleur X3 (X)</span><button class="btn-config" data-action="COLOR_X3">Instellen</button><span class="badge" id="map-COLOR_X3">B0</span></div>
+                <div class="config-item"><span class="w-2/5">Kleur X4 (Y)</span><button class="btn-config" data-action="COLOR_X4">Instellen</button><span class="badge" id="map-COLOR_X4">B1</span></div>
+                <div class="config-item"><span class="w-2/5">Wissel Modus</span><button class="btn-config" data-action="CYCLE_MODE">Instellen</button><span class="badge" id="map-CYCLE_MODE">B10</span></div>
+            </div>
+             <div class="pt-4 border-t border-gray-700 space-y-2">
+                <label for="deadzone-slider" class="block text-sm font-medium">Joystick Gevoeligheid (Deadzone)</label>
+                <input id="deadzone-slider" type="range" min="0.1" max="0.8" step="0.05" value="0.4" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+             </div>
+            <button id="close-config-button" class="btn btn-blue w-full">Opslaan en Sluiten</button>
         </div>
     </div>
 
