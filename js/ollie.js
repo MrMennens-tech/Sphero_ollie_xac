@@ -23,19 +23,19 @@ export class Ollie {
         this.device = null;
         this.config = new Config();
         this.sequence = 0;
+        this.isBusy = false; // Flag to prevent command flooding
         this.Motors = {
             off: 0x00,
             forward: 0x01,
             reverse: 0x02,
         };
-        this.currentHeading = 0; // Added to keep track of heading
+        this.currentHeading = 0;
         this.onDisconnectCallback = null;
-        // Bind `this` context to onDisconnected, ensuring it always refers to the Ollie instance.
         this.onDisconnected = this.onDisconnected.bind(this);
     }
 
     async request(onDisconnect) {
-        this.onDisconnectCallback = onDisconnect; // Store the callback function for UI updates
+        this.onDisconnectCallback = onDisconnect;
         let options = {
             "filters": [{
                 "services": [this.config.radioService()]
@@ -66,33 +66,53 @@ export class Ollie {
         console.log('> Wrote TX Power characteristic');
         await this._writeCharacteristic(this.config.radioService(), this.config.wakeUpCPUCharateristic(), new Uint8Array([0x01]));
         console.log('> Wrote Wake CPU characteristic');
-        await this._sendCommand(0x02, 0x21, new Uint8Array([127])); // Set BackLed
-        console.log('> Back LED set');
-        await this._sendCommand(0x02, 0x01, new Uint8Array([0 >> 8, 0 & 0xFF])); // Set Heading
+        await this.setBackLed(0);
+        console.log('> Back LED set to off');
+        await this.setHeading(0);
         console.log('> Heading set, device is ready!');
     }
     
-    // The library uses processMotor, we'll keep that name
     async drive(heading, speed) {
         this.currentHeading = heading;
-        let did = 0x02; // Virtual device ID
-        let cid = 0x30; // Roll command
+        let did = 0x02;
+        let cid = 0x30;
         let data = new Uint8Array([speed, heading >> 8, heading & 0xFF, 1]);
         await this._sendCommand(did, cid, data);
     }
     
-    // The library uses processColor, we'll keep that name
     async setColor(red, green, blue) {
-        let did = 0x02; // Virtual device ID
-        let cid = 0x20; // Set RGB LED Output command
-        let data = new Uint8Array([red, green, blue, 1]); // Flag 1 to save color
+        let did = 0x02;
+        let cid = 0x20;
+        let data = new Uint8Array([red, green, blue, 1]);
         await this._sendCommand(did, cid, data);
     }
     
     async setRawMotors(lmode, lpower, rmode, rpower) {
-        let did = 0x02; // Virtual device ID
-        let cid = 0x33; // Set raw Motors command
+        let did = 0x02;
+        let cid = 0x33;
         let data = new Uint8Array([lmode, lpower, rmode, rpower]);
+        await this._sendCommand(did, cid, data);
+    }
+
+    async setBackLed(brightness) {
+        let did = 0x02;
+        let cid = 0x21;
+        let data = new Uint8Array([brightness]);
+        await this._sendCommand(did, cid, data);
+    }
+
+    async setHeading(heading) {
+        let did = 0x02;
+        let cid = 0x01;
+        let data = new Uint8Array([heading >> 8, heading & 0xFF]);
+        await this._sendCommand(did, cid, data);
+    }
+
+    async sleep() {
+        console.log('> Putting Ollie to sleep...');
+        const did = 0x00; // Core device ID
+        const cid = 0x22; // Sleep command ID
+        const data = new Uint8Array([0x00]); // Sleep now
         await this._sendCommand(did, cid, data);
     }
 
@@ -112,19 +132,31 @@ export class Ollie {
     }
 
     async _sendCommand(did, cid, data) {
-        let seq = this.sequence & 255;
-        this.sequence += 1;
-        let dlen = data.byteLength + 1;
-        let sum = data.reduce((a, b) => a + b, 0);
-        let chk = (sum + did + cid + seq + dlen) & 255;
-        chk ^= 255;
-        let checksum = new Uint8Array([chk]);
-        let packets = new Uint8Array([0xff, 0xff, did, cid, seq, dlen]);
-        let array = new Uint8Array(packets.byteLength + data.byteLength + checksum.byteLength);
-        array.set(packets, 0);
-        array.set(data, packets.byteLength);
-        array.set(checksum, packets.byteLength + data.byteLength);
-        await this._writeCharacteristic(this.config.robotService(), this.config.controlCharacteristic(), array);
+        if (this.isBusy) {
+            // console.log('Command dropped, Ollie is busy.');
+            return; // Drop command if another is in progress
+        }
+        
+        this.isBusy = true;
+        try {
+            let seq = this.sequence & 255;
+            this.sequence += 1;
+            let dlen = data.byteLength + 1;
+            let sum = data.reduce((a, b) => a + b, 0);
+            let chk = (sum + did + cid + seq + dlen) & 255;
+            chk ^= 255;
+            let checksum = new Uint8Array([chk]);
+            let packets = new Uint8Array([0xff, 0xff, did, cid, seq, dlen]);
+            let array = new Uint8Array(packets.byteLength + data.byteLength + checksum.byteLength);
+            array.set(packets, 0);
+            array.set(data, packets.byteLength);
+            array.set(checksum, packets.byteLength + data.byteLength);
+            await this._writeCharacteristic(this.config.robotService(), this.config.controlCharacteristic(), array);
+        } catch(error) {
+            console.error("Error sending command:", error);
+        } finally {
+            this.isBusy = false; // Release the lock
+        }
     }
 
     async _writeCharacteristic(serviceUID, characteristicUID, value) {
