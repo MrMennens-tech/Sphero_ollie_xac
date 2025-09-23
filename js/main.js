@@ -24,6 +24,17 @@ let currentColor = { r: 0, g: 191, b: 255 }; // Default blue
 function updateOllieStatus(text, statusClass) {
     ollieStatus.textContent = `Ollie: ${text}`;
     ollieStatusDot.className = `status-dot ${statusClass}`;
+
+    // Update connect button text and style based on status
+    if (statusClass === 'connected') {
+        connectButton.textContent = 'Verbreek Verbinding';
+        connectButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+        connectButton.classList.add('bg-red-600', 'hover:bg-red-700');
+    } else {
+        connectButton.textContent = 'Verbind met Ollie';
+        connectButton.classList.remove('bg-red-600', 'hover:bg-red-700');
+        connectButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+    }
 }
 
 function updateGamepadStatus(text, statusClass) {
@@ -130,7 +141,15 @@ function gameLoop() {
     const gp = navigator.getGamepads()[gamepadIndex];
     if (!gp) return;
 
-    const currentButtonStates = gp.buttons.map(b => b.pressed);
+    // Create a custom button state array to handle the trigger (button 6 / index 5)
+    const TRIGGER_THRESHOLD = 0.5;
+    const currentButtonStates = gp.buttons.map((button, index) => {
+        // This is X6 (usually button index 5), which is a trigger
+        if (index === 5) { 
+            return button.value > TRIGGER_THRESHOLD;
+        }
+        return button.pressed;
+    });
 
     const comboPressed = currentButtonStates[4] && currentButtonStates[5];
     const prevComboPressed = previousButtonStates[4] && previousButtonStates[5];
@@ -211,4 +230,5 @@ colorPicker.addEventListener('input', (event) => {
     const b = parseInt(hex.slice(5, 7), 16);
     applyColor(r, g, b);
 });
+
 
