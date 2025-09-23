@@ -87,34 +87,12 @@ export class Ollie {
     setRawMotors(lmode, lpower, rmode, rpower) { return this._sendCommand(0x02, 0x33, new Uint8Array([lmode, lpower, rmode, rpower])); }
     async sleep() { await this.setBackLed(0); return this._sendCommand(0x00, 0x22, new Uint8Array([0])); }
     disconnect() { if (this.device) this.device.gatt.disconnect(); }
-    
-    // --- NEW ROBUST MANUAL BATTERY CHECK ---
-    async getBatteryLevel() {
-        if (!this.device || !this.device.gatt.connected) {
-             console.warn("Cannot get battery level, device not connected.");
-             return null;
-        }
-        try {
-            // This reads the battery voltage from the RADIO service
-            const radioService = await this.device.gatt.getPrimaryService(this.services.RADIO);
-            const powerCharacteristic = await radioService.getCharacteristic(this.characteristics.POWER);
-            const value = await powerCharacteristic.readValue();
-            const voltage = value.getUint16(0, true) / 100.0; // Assuming little-endian
-
-            const minVoltage = 7.0, maxVoltage = 8.4;
-            const percentage = Math.round(((voltage - minVoltage) / (maxVoltage - minVoltage)) * 100);
-            return Math.max(0, Math.min(100, percentage)); // Clamp between 0-100
-        } catch (error) {
-            console.error(">>> FAILED to read battery level:", error);
-            return null; // Return null on failure
-        }
-    }
 
     // --- Private BLE Methods ---
     async _sendCommand(did, cid, data) {
         if (this.isBusy) return Promise.resolve();
         if (!this.device || !this.device.gatt.connected || !this.controlCharacteristic) {
-            console.error('Cannot send command: Not connected or characteristic not available.');
+            // console.error('Cannot send command: Not connected or characteristic not available.');
             return;
         }
         this.isBusy = true;
