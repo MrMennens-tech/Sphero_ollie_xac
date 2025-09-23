@@ -29,9 +29,13 @@ export class Ollie {
             reverse: 0x02,
         };
         this.currentHeading = 0; // Added to keep track of heading
+        this.onDisconnectCallback = null;
+        // Bind `this` context to onDisconnected, ensuring it always refers to the Ollie instance.
+        this.onDisconnected = this.onDisconnected.bind(this);
     }
 
-    async request() {
+    async request(onDisconnect) {
+        this.onDisconnectCallback = onDisconnect; // Store the callback function for UI updates
         let options = {
             "filters": [{
                 "services": [this.config.radioService()]
@@ -41,7 +45,7 @@ export class Ollie {
             "optionalServices": [this.config.radioService(), this.config.robotService()]
         };
         this.device = await navigator.bluetooth.requestDevice(options);
-        this.device.addEventListener('gattserverdisconnected', () => this.onDisconnected());
+        this.device.addEventListener('gattserverdisconnected', this.onDisconnected);
     }
 
     async connect() {
@@ -100,9 +104,11 @@ export class Ollie {
     }
 
     onDisconnected() {
-        console.log('Device is disconnected.');
+        console.log('--- OLLIE DISCONNECTED --- Device object is now null.');
         this.device = null;
-        // The main script will handle UI updates via the event listener
+        if (this.onDisconnectCallback) {
+            this.onDisconnectCallback();
+        }
     }
 
     async _sendCommand(did, cid, data) {
