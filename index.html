@@ -138,13 +138,14 @@
                 </label>
             </div>
             <div id="touch-controls" class="hidden w-full h-full flex flex-col items-center justify-center gap-4">
+                <div id="joystick-zone" class="relative w-48 h-48 rounded-full bg-slate-700/50"></div>
                 <div class="grid grid-cols-2 gap-4 w-full">
                      <button data-action="speed-up" class="btn-touch">Snelheid +</button>
                      <button data-action="speed-down" class="btn-touch">Snelheid -</button>
                 </div>
                 <button data-action="cycle-mode" class="btn-touch w-full">Wissel Modus</button>
-                 <button id="touch-aim" class="btn-touch w-full">Richten (3s inhouden)</button>
-                <div id="touch-tricks" class="hidden grid-cols-2 gap-4 w-full">
+                 <button id="touch-aim" class="btn-touch w-full">Richten</button>
+                <div id="touch-tricks" class="hidden grid grid-cols-2 gap-4 w-full">
                     <button data-trick="spinLeft" class="btn-touch">Spin Links</button>
                     <button data-trick="spinRight" class="btn-touch">Spin Rechts</button>
                     <button data-trick="flipForward" class="btn-touch">Flip Vooruit</button>
@@ -205,7 +206,8 @@
             <button id="close-config-button" class="btn-secondary w-full">Sluiten</button>
         </div>
     </div>
-
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <script src="js/ollie.js" type="module"></script>
     <script src="js/main.js" type="module"></script>
 </body>
