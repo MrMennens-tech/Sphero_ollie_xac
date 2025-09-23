@@ -1,178 +1,203 @@
-Startpagina
-Financieel
-Reizen
-Academisch
-Sport
-Library
-Ik wil een app maken die: [https://github.com/binomed/sphero_ollie-web-bluetooth](https://github.com
-zijn zelesta dekbedden echt goed of is het een grote marketing stunt?
-1247 is de hoogte in mm van mijn kast, ik wil 5 gedeeltes maken om kleding neer te leggen. de planke
-als ik deze wil vervangen voor hetzelfde type, welke moet ik dan nu hebben? geef ook een link naar d
-is het mogelijk om in Bambi Studio iets van een swirl effect te creëren met multicolor paint modus?
-thule omnistor elektrisch
-Dit product wil ik graag kopen in nederland... zoek dit!
-waar vind ik zo'n profiel?
-Remis Remiflair I Combirollo
-ik wil een dfplayer mini koppelen aan een rp2040 bordje , aan dit bordje wil ik ook een ws2810 led r
-Bekijk alles
-Startpagina
-Ontdekken
-Ruimtes
-Account
+import { Ollie } from './ollie.js';
 
-Upgrade
-User avatar
-Ik wil een app maken die:
-https://github.com/binomed/sphero_ollie-web-bluetooth gebruikt, maar extra functionaliteit heeft. Ik wil namelijk een USB joystick (xbox adaptive joystick) gebruiken om de sphero ollie te besturen.
+// --- DOM Elements ---
+const connectButton = document.getElementById('connect-button');
+const colorPicker = document.getElementById('color-picker');
+const joystickZone = document.getElementById('joystick-zone');
+const ollieStatus = document.getElementById('ollie-status');
+const ollieStatusDot = document.getElementById('ollie-status-dot');
+const gamepadStatus = document.getElementById('gamepad-status');
+const gamepadStatusDot = document.getElementById('gamepad-status-dot');
+const speedIndicator = document.getElementById('speed-indicator');
+const modeIndicator = document.getElementById('mode-indicator');
 
-Maak een web app (duplicaat van de binomed github) maar voeg de controle toe van de controller
+// --- State Variables ---
+const ollie = new Ollie();
+let gamepadIndex = null;
+let isDriving = false;
+let previousButtonStates = [];
+let maxSpeed = 1.0; // 100%
+let isTrickMode = false;
+let currentColor = { r: 0, g: 191, b: 255 }; // Default blue
 
-Ik wil een app maken die: https://github.com/binomed/sphero_ollie-web-bluetooth gebruikt, maar extra functionaliteit heeft. Ik wil namelijk een USB joystick (xbox adaptive joystick) gebruiken om de sphero ollie te besturen. Maak een web app (duplicaat van de binomed github) maar voeg de controle toe van de controller
-<!DOCTYPE html>
-<html lang="nl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sphero Ollie Controller</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <div class="container">
-        <header class="app-header">
-            <h1>Sphero Ollie Controller</h1>
-            <p>Bestuur je Sphero Ollie met Xbox Adaptive Controller</p>
-        </header>
-        <main class="app-main">
-            <!-- Bluetooth Section -->
-            <section class="card connection-section">
-                <div class="card__header">
-                    <h2>Bluetooth Verbinding</h2>
-                    <div class="status bluetooth-status">
-                        <span class="status--error" id="bluetooth-status">Niet verbonden</span>
-                    </div>
-                </div>
-                <div class="card__body">
-                    <button class="btn btn--primary" id="connect-btn">Verbind met Sphero Ollie</button>
-                    <button class="btn btn--outline" id="disconnect-btn" disabled>Verbinding verbreken</button>
-                    <p class="connection-info" id="connection-info">Klik op 'Verbind met Sphero Ollie' om te beginnen.</p>
-                </div>
-            </section>
-            <!-- Gamepad Section -->
-            <section class="card gamepad-section">
-                <div class="card__header">
-                    <h2>Gamepad Bediening</h2>
-                    <div class="status gamepad-status">
-                        <span class="status--error" id="gamepad-status">Niet verbonden</span>
-                    </div>
-                </div>
-                <div class="card__body">
-                    <div class="gamepad-info">
-                        <p>Sluit je Xbox Adaptive Controller aan via USB voor automatische detectie.</p>
-                        <div class="gamepad-controls">
-                            <div class="control-group">
-index.html
-:root {
-style.css
-class SpheroOllieController {
-    constructor() {
-        this.device = null;
-        this.server = null;
-        this.service = null;
-        this.characteristics = {};
-        this.isConnected = false;
-        // Gamepad state
-        this.gamepad = null;
-        this.gamepadIndex = -1;
-        this.lastGamepadState = null;
-        this.gamepadPollId = null;
-        // Movement state
-        this.currentSpeed = 128;
-        this.isMoving = false;
-        // Sphero service and characteristic UUIDs
-        this.SPHERO_SERVICE_UUID = '22bb746f-2bb0-7554-2d6f-726568705327';
-        this.SPHERO_COMMAND_UUID = '22bb746f-2ba1-7554-2d6f-726568705327';
-        this.SPHERO_RESPONSE_UUID = '22bb746f-2ba6-7554-2d6f-726568705327';
-        // Colors from application data
-        this.colors = {
-            "rood": {r: 255, g: 0, b: 0},
-            "blauw": {r: 0, g: 0, b: 255},
-            "groen": {r: 0, g: 255, b: 0},
-            "geel": {r: 255, g: 255, b: 0},
-            "roze": {r: 255, g: 0, b: 255},
-            "cyaan": {r: 0, g: 255, b: 255},
-            "wit": {r: 255, g: 255, b: 255},
-            "uit": {r: 0, g: 0, b: 0}
-        };
-        // Button mapping
-        this.buttonMapping = {
-            0: 'rood',    // A
-            1: 'blauw',   // B  
-            2: 'groen',   // X
-            3: 'geel'     // Y
-        };
-        this.init();
+// --- UI Update Functions ---
+function updateOllieStatus(text, statusClass) {
+    ollieStatus.textContent = `Ollie: ${text}`;
+    ollieStatusDot.className = `status-dot ${statusClass}`;
+}
+
+function updateGamepadStatus(text, statusClass) {
+    gamepadStatus.textContent = `Gamepad: ${text}`;
+    gamepadStatusDot.className = `status-dot ${statusClass}`;
+}
+
+// --- On-screen Joystick Setup ---
+const joystickManager = nipplejs.create({
+    zone: joystickZone,
+    mode: 'static',
+    position: { left: '50%', top: '50%' },
+    color: 'white',
+    size: 150
+});
+
+joystickManager.on('move', (evt, data) => {
+    if (!ollie.device || gamepadIndex !== null || isTrickMode) return;
+    const speed = Math.min(Math.floor(data.distance * 3), 255);
+    const heading = Math.round(data.angle.degree);
+    ollie.drive(Math.round(speed * maxSpeed), heading);
+    isDriving = true;
+});
+
+joystickManager.on('end', () => {
+    if (!ollie.device || !isDriving) return;
+    ollie.drive(0, 0); // Stop
+    isDriving = false;
+});
+
+// --- Gamepad API Logic ---
+window.addEventListener('gamepadconnected', (e) => {
+    console.log('Gamepad connected:', e.gamepad.id);
+    gamepadIndex = e.gamepad.index;
+    updateGamepadStatus('Verbonden', 'connected');
+    previousButtonStates = e.gamepad.buttons.map(b => b.pressed);
+    gameLoop();
+});
+
+window.addEventListener('gamepaddisconnected', (e) => {
+    console.log('Gamepad disconnected:', e.gamepad.id);
+    if (gamepadIndex === e.gamepad.index) {
+        gamepadIndex = null;
+        updateGamepadStatus('Niet verbonden', 'disconnected');
     }
-    init() {
-        this.bindEvents();
-        this.checkGamepadSupport();
-        this.startGamepadPolling();
-        this.updateUI();
+});
+
+function changeMaxSpeed(amount) {
+    maxSpeed += amount;
+    maxSpeed = Math.max(0.1, Math.min(1.0, maxSpeed)); // Clamp between 10% and 100%
+    speedIndicator.textContent = `Max Snelheid: ${Math.round(maxSpeed * 100)}%`;
+    // Re-apply color to adjust brightness
+    applyColor(currentColor.r, currentColor.g, currentColor.b, true);
+}
+
+function applyColor(r, g, b, internalCall = false) {
+    if (!ollie.device) return;
+    currentColor = {r, g, b};
+    const brightR = Math.round(r * maxSpeed);
+    const brightG = Math.round(g * maxSpeed);
+    const brightB = Math.round(b * maxSpeed);
+    ollie.setColor(brightR, brightG, brightB);
+
+    if (!internalCall) {
+        // Update color picker UI if changed by gamepad
+        const toHex = c => ('0'+(c).toString(16)).slice(-2);
+        colorPicker.value = `#${toHex(r)}${toHex(g)}${toHex(b)}`;
     }
-    bindEvents() {
-        // Bluetooth controls
-        document.getElementById('connect-btn').addEventListener('click', () => this.connectBluetooth());
-        document.getElementById('disconnect-btn').addEventListener('click', () => this.disconnectBluetooth());
-        // Manual color controls
-        document.querySelectorAll('.color-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-app.js
-sphero-gamepad-controller.zip
-sphero-gamepad-controller.zip
-index.html
-Gegenereerd Bestand
-<!DOCTYPE html>
-<html lang="nl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sphero Ollie Controller</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <div class="container">
-        <header class="app-header">
-            <h1>Sphero Ollie Controller</h1>
-            <p>Bestuur je Sphero Ollie met Xbox Adaptive Controller</p>
-        </header>
+}
 
-        <main class="app-main">
-            <!-- Bluetooth Section -->
-            <section class="card connection-section">
-                <div class="card__header">
-                    <h2>Bluetooth Verbinding</h2>
-                    <div class="status bluetooth-status">
-                        <span class="status--error" id="bluetooth-status">Niet verbonden</span>
-                    </div>
-                </div>
-                <div class="card__body">
-                    <button class="btn btn--primary" id="connect-btn">Verbind met Sphero Ollie</button>
-                    <button class="btn btn--outline" id="disconnect-btn" disabled>Verbinding verbreken</button>
-                    <p class="connection-info" id="connection-info">Klik op 'Verbind met Sphero Ollie' om te beginnen.</p>
-                </div>
-            </section>
+function updateModeIndicator() {
+    modeIndicator.textContent = `Modus: ${isTrickMode ? 'Trick' : 'Normaal'}`;
+    modeIndicator.className = `w-48 text-center p-2 rounded-lg font-medium ${isTrickMode ? 'bg-purple-600' : 'bg-indigo-600'}`;
+}
 
-            <!-- Gamepad Section -->
-            <section class="card gamepad-section">
-                <div class="card__header">
-                    <h2>Gamepad Bediening</h2>
-                    <div class="status gamepad-status">
-                        <span class="status--error" id="gamepad-status">Niet verbonden</span>
-                    </div>
-                </div>
-                <div class="card__body">
-                    <div class="gamepad-info">
-                        <p>Sluit je Xbox Adaptive Controller aan via USB voor automatische detectie.</p>
-                        <div class="gamepad-controls">
-                            <div class="control-group">
-                        
-Asset 1 van 3
+async function doTrick(trickName) {
+    if (!ollie.device) return;
+    switch(trickName) {
+        case 'spinLeft':
+            await ollie.setRawMotors(2, 200, 1, 200);
+            setTimeout(() => ollie.setRawMotors(0, 0, 0, 0), 500);
+            break;
+        case 'spinRight':
+            await ollie.setRawMotors(1, 200, 2, 200);
+            setTimeout(() => ollie.setRawMotors(0, 0, 0, 0), 500);
+            break;
+        case 'flipForward':
+            await ollie.drive(255, ollie.currentHeading);
+            setTimeout(() => ollie.drive(0, ollie.currentHeading), 300);
+            break;
+        case 'flipBackward':
+            const backHeading = (ollie.currentHeading + 180) % 360;
+            await ollie.drive(255, backHeading);
+            setTimeout(() => ollie.drive(0, backHeading), 300);
+            break;
+    }
+}
+
+function gameLoop() {
+    if (gamepadIndex === null) return;
+    
+    const gp = navigator.getGamepads()[gamepadIndex];
+    if (!gp) return;
+
+    const currentButtonStates = gp.buttons.map(b => b.pressed);
+
+    const comboPressed = currentButtonStates[4] && currentButtonStates[5];
+    const prevComboPressed = previousButtonStates[4] && previousButtonStates[5];
+    if (comboPressed && !prevComboPressed) {
+        isTrickMode = !isTrickMode;
+        updateModeIndicator();
+    }
+
+    if (isTrickMode) {
+        if (currentButtonStates[0] && !previousButtonStates[0]) doTrick('spinLeft');
+        if (currentButtonStates[1] && !previousButtonStates[1]) doTrick('flipForward');
+        if (currentButtonStates[2] && !previousButtonStates[2]) doTrick('flipBackward');
+        if (currentButtonStates[3] && !previousButtonStates[3]) doTrick('spinRight');
+    } else {
+        if (currentButtonStates[4] && !previousButtonStates[4]) changeMaxSpeed(-0.1);
+        if (currentButtonStates[5] && !previousButtonStates[5]) changeMaxSpeed(0.1);
+        if (currentButtonStates[0] && !previousButtonStates[0]) applyColor(255, 0, 0);
+        if (currentButtonStates[1] && !previousButtonStates[1]) applyColor(0, 0, 255);
+        if (currentButtonStates[2] && !previousButtonStates[2]) applyColor(0, 255, 0);
+        if (currentButtonStates[3] && !previousButtonStates[3]) applyColor(255, 255, 0);
+
+        const x = gp.axes[0];
+        const y = -gp.axes[1];
+        const deadzone = 0.15;
+        const magnitude = Math.sqrt(x * x + y * y);
+
+        if (magnitude > deadzone) {
+            isDriving = true;
+            const speed = Math.min(Math.floor(((magnitude - deadzone) / (1 - deadzone)) * 255), 255);
+            let heading = Math.atan2(x, y) * (180 / Math.PI);
+            if (heading < 0) heading += 360;
+            
+            if (ollie.device) {
+                ollie.drive(Math.round(speed * maxSpeed), heading);
+            }
+        } else if (isDriving) {
+            if (ollie.device) ollie.drive(0, 0);
+            isDriving = false;
+        }
+    }
+
+    previousButtonStates = currentButtonStates;
+    requestAnimationFrame(gameLoop);
+}
+
+// --- Event Listeners ---
+connectButton.addEventListener('click', async () => {
+    if (ollie.device && ollie.device.gatt.connected) {
+        ollie.device.gatt.disconnect();
+    } else {
+        try {
+            updateOllieStatus('Zoeken...', 'connecting');
+            await ollie.connect();
+            updateOllieStatus('Verbonden', 'connected');
+            // Re-add event listener after successful connection
+            ollie.device.addEventListener('gattserverdisconnected', () => {
+                updateOllieStatus('Niet verbonden', 'disconnected');
+            });
+        } catch (error) {
+            console.error('Connection process failed:', error);
+            updateOllieStatus('Verbinding mislukt', 'disconnected');
+        }
+    }
+});
+
+colorPicker.addEventListener('input', (event) => {
+    const hex = event.target.value;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    applyColor(r, g, b);
+});
