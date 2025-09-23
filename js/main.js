@@ -10,35 +10,53 @@ const gamepadStatus = document.getElementById('gamepad-status');
 const gamepadStatusDot = document.getElementById('gamepad-status-dot');
 const speedIndicator = document.getElementById('speed-indicator');
 const modeIndicator = document.getElementById('mode-indicator');
+const fullPowerButton = document.getElementById('full-power-button');
+const colorInputs = {
+    x1: document.getElementById('color-x1'),
+    x2: document.getElementById('color-x2'),
+    x3: document.getElementById('color-x3'),
+    x4: document.getElementById('color-x4'),
+};
 
 // --- State Variables ---
 const ollie = new Ollie();
 let gamepadIndex = null;
 let isDriving = false;
 let previousButtonStates = [];
-let maxSpeed = 1.0; // 100%
+let maxSpeed = 0.20; // Start at 20%
+const NORMAL_MAX_SPEED = 0.40; // Capped at 40% in normal mode
+const SPEED_STEP = 0.05; // Adjust in steps of 5%
+let isFullPowerMode = false;
 let isTrickMode = false;
-let currentColor = { r: 0, g: 191, b: 255 }; // Default blue
-
-// Aiming state
+let currentColor = { r: 0, g: 191, b: 255 };
+let buttonColorMappings = {
+    x1: '#ff0000', x2: '#0000ff', x3: '#00ff00', x4: '#ffff00'
+};
 let isAiming = false;
 let aimButtonPressTime = 0;
 let lastAimHeading = 0;
-const AIM_HOLD_DURATION = 3000; // 3 seconds
+const AIM_HOLD_DURATION = 3000;
+
+// --- Helper Functions ---
+function hexToRgb(hex) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return { r, g, b };
+}
 
 // --- UI Update Functions ---
 function updateOllieStatus(text, statusClass) {
     ollieStatus.textContent = `Ollie: ${text}`;
     ollieStatusDot.className = `status-dot ${statusClass}`;
-
     if (statusClass === 'connected') {
         connectButton.textContent = 'Verbreek Verbinding';
-        connectButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
         connectButton.classList.add('bg-red-600', 'hover:bg-red-700');
+        connectButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
     } else {
         connectButton.textContent = 'Verbind met Ollie';
-        connectButton.classList.remove('bg-red-600', 'hover:bg-red-700');
         connectButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        connectButton.classList.remove('bg-red-600', 'hover:bg-red-700');
     }
 }
 
@@ -47,23 +65,33 @@ function updateGamepadStatus(text, statusClass) {
     gamepadStatusDot.className = `status-dot ${statusClass}`;
 }
 
+function updateSpeedIndicator() {
+    const speedToShow = isFullPowerMode ? 1.0 : maxSpeed;
+    speedIndicator.textContent = `Max Snelheid: ${Math.round(speedToShow * 100)}%`;
+}
+
+function updateFullPowerButtonUI() {
+    fullPowerButton.textContent = `Full Power: ${isFullPowerMode ? 'AAN' : 'UIT'}`;
+    fullPowerButton.classList.toggle('bg-green-600', isFullPowerMode);
+    fullPowerButton.classList.toggle('hover:bg-green-700', isFullPowerMode);
+    fullPowerButton.classList.toggle('bg-gray-600', !isFullPowerMode);
+    fullPowerButton.classList.toggle('hover:bg-gray-700', !isFullPowerMode);
+    updateSpeedIndicator();
+    applyColor(currentColor.r, currentColor.g, currentColor.b, true);
+}
+
 // --- On-screen Joystick Setup ---
 const joystickManager = nipplejs.create({
-    zone: joystickZone,
-    mode: 'static',
-    position: { left: '50%', top: '50%' },
-    color: 'white',
-    size: 150
+    zone: joystickZone, mode: 'static', position: { left: '50%', top: '50%' }, color: 'white', size: 150
 });
-
 joystickManager.on('move', (evt, data) => {
     if (!ollie.device || gamepadIndex !== null || isTrickMode) return;
     const speed = Math.min(Math.floor(data.distance * 3), 255);
     const heading = Math.round(data.angle.degree);
-    ollie.drive(heading, Math.round(speed * maxSpeed));
+    const currentMaxSpeed = isFullPowerMode ? 1.0 : maxSpeed;
+    ollie.drive(heading, Math.round(speed * currentMaxSpeed));
     isDriving = true;
 });
-
 joystickManager.on('end', () => {
     if (!ollie.device || !isDriving) return;
     ollie.drive(ollie.currentHeading, 0);
@@ -72,15 +100,12 @@ joystickManager.on('end', () => {
 
 // --- Gamepad API Logic ---
 window.addEventListener('gamepadconnected', (e) => {
-    console.log('Gamepad connected:', e.gamepad.id);
     gamepadIndex = e.gamepad.index;
     updateGamepadStatus('Verbonden', 'connected');
     previousButtonStates = e.gamepad.buttons.map(b => ({ pressed: b.pressed, value: b.value }));
     gameLoop();
 });
-
 window.addEventListener('gamepaddisconnected', (e) => {
-    console.log('Gamepad disconnected:', e.gamepad.id);
     if (gamepadIndex === e.gamepad.index) {
         gamepadIndex = null;
         updateGamepadStatus('Niet verbonden', 'disconnected');
@@ -88,29 +113,29 @@ window.addEventListener('gamepaddisconnected', (e) => {
 });
 
 function changeMaxSpeed(amount) {
-    maxSpeed += amount;
-    maxSpeed = Math.max(0.1, Math.min(1.0, maxSpeed)); // Clamp between 10% and 100%
-    speedIndicator.textContent = `Max Snelheid: ${Math.round(maxSpeed * 100)}%`;
+    if (isFullPowerMode) return;
+    maxSpeed += SPEED_STEP * amount;
+    maxSpeed = Math.max(0.1, Math.min(NORMAL_MAX_SPEED, maxSpeed));
+    updateSpeedIndicator();
     applyColor(currentColor.r, currentColor.g, currentColor.b, true);
 }
 
 function applyColor(r, g, b, internalCall = false) {
     if (!ollie.device) return;
-    currentColor = {r, g, b};
-    const brightR = Math.round(r * maxSpeed);
-    const brightG = Math.round(g * maxSpeed);
-    const brightB = Math.round(b * maxSpeed);
+    currentColor = { r, g, b };
+    const currentMaxSpeed = isFullPowerMode ? 1.0 : maxSpeed;
+    const brightR = Math.round(r * currentMaxSpeed);
+    const brightG = Math.round(g * currentMaxSpeed);
+    const brightB = Math.round(b * currentMaxSpeed);
     ollie.setColor(brightR, brightG, brightB);
-
     if (!internalCall) {
-        const toHex = c => ('0'+(c).toString(16)).slice(-2);
+        const toHex = c => ('0' + (c).toString(16)).slice(-2);
         colorPicker.value = `#${toHex(r)}${toHex(g)}${toHex(b)}`;
     }
 }
 
 function updateModeIndicator() {
-    let modeText = 'Normaal';
-    let modeClass = 'bg-indigo-600';
+    let modeText = 'Normaal', modeClass = 'bg-indigo-600';
     if (isTrickMode) {
         modeText = 'Trick';
         modeClass = 'bg-purple-600';
@@ -124,44 +149,37 @@ function updateModeIndicator() {
 
 async function doTrick(trickName) {
     if (!ollie.device) return;
-    switch(trickName) {
+    const power = 255;
+    const duration = 400;
+    switch (trickName) {
         case 'spinLeft':
-            await ollie.setRawMotors(ollie.Motors.reverse, 200, ollie.Motors.forward, 200);
-            setTimeout(() => ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0), 500);
+            await ollie.setRawMotors(ollie.Motors.reverse, power, ollie.Motors.forward, power);
+            setTimeout(() => ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0), duration);
             break;
         case 'spinRight':
-            await ollie.setRawMotors(ollie.Motors.forward, 200, ollie.Motors.reverse, 200);
-            setTimeout(() => ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0), 500);
+            await ollie.setRawMotors(ollie.Motors.forward, power, ollie.Motors.reverse, power);
+            setTimeout(() => ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0), duration);
             break;
-        case 'flipForward':
-            await ollie.drive(ollie.currentHeading, 255);
-            setTimeout(() => ollie.drive(ollie.currentHeading, 0), 300);
+        case 'flipForward': // CORRECTED JUMP
+            await ollie.setRawMotors(ollie.Motors.forward, power, ollie.Motors.forward, power);
+            setTimeout(() => ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0), duration);
             break;
-        case 'flipBackward':
-            const backHeading = (ollie.currentHeading + 180) % 360;
-            await ollie.drive(backHeading, 255);
-            setTimeout(() => ollie.drive(backHeading, 0), 300);
+        case 'flipBackward': // CORRECTED JUMP
+            await ollie.setRawMotors(ollie.Motors.reverse, power, ollie.Motors.reverse, power);
+            setTimeout(() => ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0), duration);
             break;
     }
 }
 
 function handleAiming(gp) {
-    const x = gp.axes[0];
-    const y = -gp.axes[1];
-    const deadzone = 0.2;
-    const magnitude = Math.sqrt(x * x + y * y);
-
-    if (magnitude > deadzone) {
+    const x = gp.axes[0], y = -gp.axes[1], deadzone = 0.2;
+    if (Math.sqrt(x * x + y * y) > deadzone) {
         let heading = Math.atan2(x, y) * (180 / Math.PI);
         if (heading < 0) heading += 360;
         lastAimHeading = Math.round(heading);
         const spinSpeed = 80;
-        // Simple spin based on x-axis
-        if (x > 0) {
-             ollie.setRawMotors(ollie.Motors.forward, spinSpeed, ollie.Motors.reverse, spinSpeed);
-        } else {
-             ollie.setRawMotors(ollie.Motors.reverse, spinSpeed, ollie.Motors.forward, spinSpeed);
-        }
+        if (x > 0) ollie.setRawMotors(ollie.Motors.forward, spinSpeed, ollie.Motors.reverse, spinSpeed);
+        else ollie.setRawMotors(ollie.Motors.reverse, spinSpeed, ollie.Motors.forward, spinSpeed);
     } else {
         ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
     }
@@ -169,108 +187,89 @@ function handleAiming(gp) {
 
 function gameLoop() {
     if (gamepadIndex === null || !ollie.device) return;
-    
     const gp = navigator.getGamepads()[gamepadIndex];
     if (!gp) return;
 
     const TRIGGER_THRESHOLD = 0.5;
     const currentButtonStates = gp.buttons.map((button, index) => ({
-        // Button 6 (X6) is a trigger
         pressed: (index === 6) ? button.value > TRIGGER_THRESHOLD : button.pressed,
         value: button.value
     }));
-    
-    // CORRECTED BUTTON MAPPING
-    const btn_X1 = currentButtonStates[2]; // B2 = Red
-    const btn_X2 = currentButtonStates[3]; // B3 = Blue / Aim
-    const btn_X3 = currentButtonStates[0]; // B0 = Green
-    const btn_X4 = currentButtonStates[1]; // B1 = Yellow
-    const btn_X5 = currentButtonStates[4]; // B4 = Speed Down
-    const btn_X6 = currentButtonStates[6]; // B6 = Speed Up (Trigger)
-    
+
+    const btn = {
+        X1: currentButtonStates[2], X2: currentButtonStates[3], X3: currentButtonStates[0],
+        X4: currentButtonStates[1], X5: currentButtonStates[4], X6: currentButtonStates[6]
+    };
     const prev_btn_X2 = previousButtonStates[3];
-    
-    // AIMING LOGIC (uses X2/B3)
-    if (btn_X2.pressed && !prev_btn_X2.pressed) {
-        aimButtonPressTime = Date.now();
-    }
 
-    if (btn_X2.pressed) {
-        if (!isAiming && Date.now() - aimButtonPressTime > AIM_HOLD_DURATION) {
-            isAiming = true;
-            ollie.setBackLed(255); // Turn AIM LED ON
-            updateModeIndicator();
-        }
+    if (btn.X2.pressed && !prev_btn_X2.pressed) aimButtonPressTime = Date.now();
+    if (btn.X2.pressed && !isAiming && Date.now() - aimButtonPressTime > AIM_HOLD_DURATION) {
+        isAiming = true;
+        ollie.setBackLed(255);
+        updateModeIndicator();
     }
-
-    if (!btn_X2.pressed && prev_btn_X2.pressed) {
+    if (!btn.X2.pressed && prev_btn_X2.pressed) {
         if (isAiming) {
             isAiming = false;
             ollie.setHeading(lastAimHeading);
-            ollie.setBackLed(0); // Turn AIM LED OFF
+            ollie.setBackLed(0);
             ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
             updateModeIndicator();
         } else {
-             // Short press of X2/B3
-             if (!isTrickMode) applyColor(0, 0, 255); // Set color to blue
-             else doTrick('flipForward');
+            if (!isTrickMode) {
+                const { r, g, b } = hexToRgb(buttonColorMappings.x2); applyColor(r, g, b);
+            } else doTrick('flipForward');
         }
         aimButtonPressTime = 0;
     }
 
-    // MAIN CONTROL LOGIC
     if (isAiming) {
         handleAiming(gp);
     } else {
-        // TRICK MODE TOGGLE (X5+X6 / B4+B6)
-        const comboPressed = btn_X5.pressed && btn_X6.pressed;
+        const comboPressed = btn.X5.pressed && btn.X6.pressed;
         const prevComboPressed = previousButtonStates[4].pressed && previousButtonStates[6].pressed;
         if (comboPressed && !prevComboPressed) {
             isTrickMode = !isTrickMode;
+            isFullPowerMode = isTrickMode; // AUTO FULL POWER
             updateModeIndicator();
+            updateFullPowerButtonUI();
         }
 
         if (isTrickMode) {
-            // TRICK ACTIONS
-            if (btn_X1.pressed && !previousButtonStates[2].pressed) doTrick('spinLeft');
-            if (btn_X3.pressed && !previousButtonStates[0].pressed) doTrick('flipBackward');
-            if (btn_X4.pressed && !previousButtonStates[1].pressed) doTrick('spinRight');
+            if (btn.X1.pressed && !previousButtonStates[2].pressed) doTrick('spinLeft');
+            if (btn.X3.pressed && !previousButtonStates[0].pressed) doTrick('flipBackward');
+            if (btn.X4.pressed && !previousButtonStates[1].pressed) doTrick('spinRight');
         } else {
-            // NORMAL ACTIONS
-            if (btn_X5.pressed && !previousButtonStates[4].pressed) changeMaxSpeed(-0.1);
-            if (btn_X6.pressed && !previousButtonStates[6].pressed) changeMaxSpeed(0.1);
-            if (btn_X1.pressed && !previousButtonStates[2].pressed) applyColor(255, 0, 0);   // Red
-            if (btn_X3.pressed && !previousButtonStates[0].pressed) applyColor(0, 255, 0);   // Green
-            if (btn_X4.pressed && !previousButtonStates[1].pressed) applyColor(255, 255, 0); // Yellow
-
-            // DRIVING LOGIC
-            const x = gp.axes[0];
-            const y = -gp.axes[1];
-            const magnitude = Math.sqrt(x * x + y * y);
-            
-            // NEW: Stepped speed control
-            let speed = 0;
-            if (magnitude > 0.9) {
-                speed = 255; // Fast
-            } else if (magnitude > 0.6) {
-                speed = 170; // Medium
-            } else if (magnitude > 0.2) {
-                speed = 85;  // Slow
+            if (btn.X5.pressed && !previousButtonStates[4].pressed) changeMaxSpeed(-1);
+            if (btn.X6.pressed && !previousButtonStates[6].pressed) changeMaxSpeed(1);
+            if (btn.X1.pressed && !previousButtonStates[2].pressed) {
+                const { r, g, b } = hexToRgb(buttonColorMappings.x1); applyColor(r, g, b);
             }
+            if (btn.X3.pressed && !previousButtonStates[0].pressed) {
+                const { r, g, b } = hexToRgb(buttonColorMappings.x3); applyColor(r, g, b);
+            }
+            if (btn.X4.pressed && !previousButtonStates[1].pressed) {
+                const { r, g, b } = hexToRgb(buttonColorMappings.x4); applyColor(r, g, b);
+            }
+
+            const x = gp.axes[0], y = -gp.axes[1], magnitude = Math.sqrt(x * x + y * y);
+            let speed = 0;
+            if (magnitude > 0.9) speed = 255;
+            else if (magnitude > 0.6) speed = 170;
+            else if (magnitude > 0.2) speed = 85;
 
             if (speed > 0) {
                 isDriving = true;
                 let heading = Math.atan2(x, y) * (180 / Math.PI);
                 if (heading < 0) heading += 360;
-                
-                ollie.drive(Math.round(heading), Math.round(speed * maxSpeed));
+                const currentMaxSpeed = isFullPowerMode ? 1.0 : maxSpeed;
+                ollie.drive(Math.round(heading), Math.round(speed * currentMaxSpeed));
             } else if (isDriving) {
                 ollie.drive(ollie.currentHeading, 0);
                 isDriving = false;
             }
         }
     }
-
     previousButtonStates = currentButtonStates;
     requestAnimationFrame(gameLoop);
 }
@@ -279,12 +278,8 @@ function gameLoop() {
 connectButton.addEventListener('click', async () => {
     if (ollie.device && ollie.device.gatt.connected) {
         try {
-            console.log('Putting Ollie to sleep before disconnecting...');
             await ollie.sleep();
-            // NEW: Wait for sleep command to process before disconnecting
-            setTimeout(() => {
-                ollie.disconnect();
-            }, 300); 
+            setTimeout(() => ollie.disconnect(), 300);
         } catch (error) {
             console.error('Failed to send sleep command, disconnecting anyway.', error);
             ollie.disconnect();
@@ -292,13 +287,7 @@ connectButton.addEventListener('click', async () => {
     } else {
         try {
             updateOllieStatus('Zoeken...', 'connecting');
-            
-            const handleDisconnect = () => {
-                updateOllieStatus('Niet verbonden', 'disconnected');
-            };
-
-            await ollie.request(handleDisconnect);
-            
+            await ollie.request(() => updateOllieStatus('Niet verbonden', 'disconnected'));
             updateOllieStatus('Verbinden...', 'connecting');
             await ollie.connect();
             await ollie.init();
@@ -309,12 +298,18 @@ connectButton.addEventListener('click', async () => {
         }
     }
 });
-
 colorPicker.addEventListener('input', (event) => {
-    const hex = event.target.value;
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
+    const { r, g, b } = hexToRgb(event.target.value);
     applyColor(r, g, b);
 });
+
+fullPowerButton.addEventListener('click', () => {
+    isFullPowerMode = !isFullPowerMode;
+    updateFullPowerButtonUI();
+});
+
+colorInputs.x1.addEventListener('input', (e) => buttonColorMappings.x1 = e.target.value);
+colorInputs.x2.addEventListener('input', (e) => buttonColorMappings.x2 = e.target.value);
+colorInputs.x3.addEventListener('input', (e) => buttonColorMappings.x3 = e.target.value);
+colorInputs.x4.addEventListener('input', (e) => buttonColorMappings.x4 = e.target.value);
 
