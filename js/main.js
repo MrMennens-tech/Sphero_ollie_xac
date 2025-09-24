@@ -104,7 +104,7 @@ async function doTrick(trickName) {
 const handleAiming = (gp) => {
     const x = gp.axes[controlMappings.AXIS_X.index] || 0;
     const deadzone = 0.2;
-    const spinSpeed = 40; // Reduced speed
+    const spinSpeed = 60; // Increased speed
 
     if (Math.abs(x) > deadzone) {
         lastAimHeading = ollie.currentHeading + (x > 0 ? 10 : -10);
