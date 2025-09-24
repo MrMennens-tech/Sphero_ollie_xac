@@ -161,8 +161,7 @@ export class Ollie {
             const service = await this.device.gatt.getPrimaryService(serviceUID);
             const characteristic = await service.getCharacteristic(characteristicUID);
             return characteristic.writeValue(value);
-        } catch (error)
-        {
+        } catch (error) {
             console.error(`Error writing to ${characteristicUID}:`, error);
             throw error;
         }
