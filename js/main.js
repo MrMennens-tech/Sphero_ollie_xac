@@ -7,7 +7,7 @@ const gamepadStatus = document.getElementById('gamepad-status'), gamepadStatusDo
 const speedIndicator = document.getElementById('speed-indicator'), modeIndicator = document.getElementById('mode-indicator');
 const toggleTouchCheckbox = document.getElementById('toggle-touch-checkbox');
 const toggleExpertCheckbox = document.getElementById('toggle-expert-checkbox');
-const touchControlsPanel = document.getElementById('touch-controls-panel'); // Corrected ID
+const touchControlsPanel = document.getElementById('touch-controls-panel');
 const touchTricksPanel = document.getElementById('touch-tricks');
 const joystickZone = document.getElementById('joystick-zone');
 const openConfigButton = document.getElementById('open-config-button'), configModal = document.getElementById('config-modal'), closeConfigButton = document.getElementById('close-config-button');
@@ -107,7 +107,7 @@ function applyColor(r, g, b, internalCall = false) {
 }
 async function doTrick(trickName) {
     if (!ollie.device) return;
-    console.log(`[Trick] Attempting to perform: ${trickName}`);
+    console.log(`[Trick] Performing: ${trickName}`);
     isEmergencyStopped = false;
     const p = 255, M = ollie.Motors;
     const duration = trickName.includes('spin') ? 800 : 400;
@@ -123,9 +123,17 @@ const handleAiming = (gp) => {
     } else { ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0); }
 };
 function cycleMode() {
+    const oldMode = currentMode;
     currentMode = (currentMode === 'normal') ? 'trick' : 'normal';
+    console.log(`Mode changed to: ${currentMode}`);
 
+    // If switching TO trick mode, clear any lingering stop intervals from driving mode
     if (currentMode === 'trick') {
+        if (stopCommandInterval) {
+            clearInterval(stopCommandInterval);
+            stopCommandInterval = null;
+            console.log("Cleared stop interval for trick mode.");
+        }
         if (trickModeLEDInterval) clearInterval(trickModeLEDInterval);
         let isPurple = false;
         trickModeLEDInterval = setInterval(() => {
@@ -134,7 +142,7 @@ function cycleMode() {
             else { ollie.setColor(128, 0, 128); }
             isPurple = !isPurple;
         }, 500);
-    } else {
+    } else { // If switching back to normal mode
         if (trickModeLEDInterval) { clearInterval(trickModeLEDInterval); trickModeLEDInterval = null; }
         if (ollie.device) { ollie.setHeading(0); console.log("Exited trick mode, recalibrating heading."); }
         applyColor(currentColor.r, currentColor.g, currentColor.b, true); 
