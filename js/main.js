@@ -18,11 +18,11 @@ const emergencyStopButton = document.getElementById('emergency-stop-button');
 
 // --- State Variables ---
 const ollie = new Ollie();
-let joystickManager = null; // Hold the joystick instance
-let gamepadIndex = null, isDriving = false, previousButtonStates = [];
+let joystickManager = null;
+let gamepadIndex = null, isDriving = false, previousButtonStates = [], previousAxesStates = [];
 let maxSpeed = 0.20, NORMAL_MAX_SPEED = 0.40, EXPERT_MAX_SPEED = 0.60, SPEED_STEP = 0.05;
-let currentMode = 'normal'; // 'normal', 'trick'
-let isExpertMode = false; // Separate toggle for expert
+let currentMode = 'normal';
+let isExpertMode = false;
 let isAiming = false, lastAimHeading = 0;
 let currentColor = { r: 0, g: 191, b: 255 };
 let buttonColorMappings = { x1: '#ff0000', x2: '#0000ff', x3: '#00ff00', x4: '#ffff00' };
@@ -30,9 +30,20 @@ let joystickDeadzone = 0.4;
 let stopCommandInterval = null;
 let trickModeLEDInterval = null;
 let isEmergencyStopped = false;
+let isTouchModeActive = false;
 
 // --- Controller Configuration ---
-let buttonMappings = { SPEED_UP: 4, SPEED_DOWN: 6, COLOR_X1: 2, COLOR_X2: 3, COLOR_X3: 0, COLOR_X4: 1, AIM_TOGGLE_RESET: 10 };
+let controlMappings = {
+    SPEED_UP: { type: 'button', index: 4 },
+    SPEED_DOWN: { type: 'button', index: 6 },
+    COLOR_X1: { type: 'button', index: 2 },
+    COLOR_X2: { type: 'button', index: 3 },
+    COLOR_X3: { type: 'button', index: 0 },
+    COLOR_X4: { type: 'button', index: 1 },
+    AIM_TOGGLE_RESET: { type: 'button', index: 10 },
+    AXIS_X: { type: 'axis', index: 0 },
+    AXIS_Y: { type: 'axis', index: 1 }
+};
 let isWaitingForInput = false;
 let actionToMap = '';
 
@@ -91,19 +102,17 @@ async function doTrick(trickName) {
 }
 
 const handleAiming = (gp) => {
-    const x = gp.axes[0];
-    const y = -gp.axes[1];
+    const x = gp.axes[controlMappings.AXIS_X.index] || 0;
     const deadzone = 0.2;
-    const spinSpeed = 80;
+    const spinSpeed = 40; // Reduced speed
 
-    if (Math.sqrt(x*x + y*y) > deadzone) {
-        lastAimHeading = Math.round((Math.atan2(x, y) * (180 / Math.PI) + 360) % 360);
+    if (Math.abs(x) > deadzone) {
+        lastAimHeading = ollie.currentHeading + (x > 0 ? 10 : -10);
+        lastAimHeading = (lastAimHeading + 360) % 360;
         if (x > deadzone) {
             ollie.setRawMotors(ollie.Motors.forward, spinSpeed, ollie.Motors.reverse, spinSpeed);
         } else if (x < -deadzone) {
             ollie.setRawMotors(ollie.Motors.reverse, spinSpeed, ollie.Motors.forward, spinSpeed);
-        } else {
-             ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
         }
     } else {
         ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
@@ -118,7 +127,6 @@ function cycleMode() {
         if (stopCommandInterval) {
             clearInterval(stopCommandInterval);
             stopCommandInterval = null;
-            console.log("Cleared stop interval for trick mode.");
         }
         if (trickModeLEDInterval) clearInterval(trickModeLEDInterval);
         let isPurple = false;
@@ -139,8 +147,9 @@ function cycleMode() {
 
 // --- Main Gamepad Loop ---
 function gameLoop() {
-    if (gamepadIndex === null || !ollie.device || !ollie.device.gatt.connected) {
+    if (isTouchModeActive || gamepadIndex === null || !ollie.device || !ollie.device.gatt.connected) {
         if (stopCommandInterval) { clearInterval(stopCommandInterval); stopCommandInterval = null; }
+        requestAnimationFrame(gameLoop);
         return; 
     }
     
@@ -156,69 +165,85 @@ function gameLoop() {
     }
 
     const currentButtonStates = gp.buttons.map(b => b.pressed || b.value > 0.5);
+    const currentAxesStates = gp.axes.map(a => a);
 
     if (isWaitingForInput) {
-        const newPressIndex = currentButtonStates.findIndex((state, i) => state && !previousButtonStates[i]);
-        if (newPressIndex > -1) {
-            console.log(`[Config Debug] NEW Button press detected on index: ${newPressIndex} for action: ${actionToMap}`);
-            buttonMappings[actionToMap] = newPressIndex;
-            document.getElementById(`map-${actionToMap}`).textContent = `${actionToMap.replace(/_/g, ' ')} (B${newPressIndex})`;
+        const movedAxis = currentAxesStates.findIndex((val, i) => Math.abs(val) > 0.8 && Math.abs(previousAxesStates[i]) < 0.5);
+        if (movedAxis > -1) {
+            console.log(`[Config Debug] AXIS movement detected on index: ${movedAxis} for action: ${actionToMap}`);
+            controlMappings[actionToMap] = { type: 'axis', index: movedAxis };
+            document.getElementById(`map-${actionToMap}`).textContent = `${actionToMap.replace(/_/g, ' ')} (As ${movedAxis})`;
             isWaitingForInput = false;
-            configInstructions.textContent = 'Gekoppeld! Kies een andere actie.';
+            configInstructions.textContent = 'As gekoppeld!';
+        } else {
+            const newPressIndex = currentButtonStates.findIndex((state, i) => state && !previousButtonStates[i]);
+            if (newPressIndex > -1) {
+                console.log(`[Config Debug] NEW Button press detected on index: ${newPressIndex} for action: ${actionToMap}`);
+                controlMappings[actionToMap] = { type: 'button', index: newPressIndex };
+                document.getElementById(`map-${actionToMap}`).textContent = `${actionToMap.replace(/_/g, ' ')} (B${newPressIndex})`;
+                isWaitingForInput = false;
+                configInstructions.textContent = 'Gekoppeld! Kies een andere actie.';
+            }
         }
     } else {
-        const getBtn = (action) => gp.buttons[buttonMappings[action]];
-        const btnState = (action) => {
-            const btn = getBtn(action);
-            if (!btn) return false;
-            return btn.pressed || btn.value > 0.5;
-        };
-        const btnPressed = (action) => btnState(action) && !previousButtonStates[buttonMappings[action]];
-
-        if (btnPressed('AIM_TOGGLE_RESET')) {
-             if (isEmergencyStopped) {
-                isEmergencyStopped = false;
-                console.log("Emergency stop reset by button.");
+        const getControlState = (action) => {
+            const mapping = controlMappings[action];
+            if (!mapping) return false;
+            if (mapping.type === 'axis') {
+                return gp.axes[mapping.index] > 0.5;
+            } else {
+                const btn = gp.buttons[mapping.index];
+                return btn ? (btn.pressed || btn.value > 0.5) : false;
             }
+        };
+        const getControlPressed = (action) => {
+            const mapping = controlMappings[action];
+            if (!mapping) return false;
+            if (mapping.type === 'axis') {
+                return gp.axes[mapping.index] > 0.5 && previousAxesStates[mapping.index] < 0.5;
+            } else {
+                return (gp.buttons[mapping.index]?.pressed || gp.buttons[mapping.index]?.value > 0.5) && !previousButtonStates[mapping.index];
+            }
+        };
+
+        if (getControlPressed('AIM_TOGGLE_RESET')) {
+             if (isEmergencyStopped) { isEmergencyStopped = false; console.log("E-Stop reset by button."); }
             isAiming = !isAiming;
             if (isAiming) {
-                console.log("Aiming started.");
                 ollie.setBackLed(255);
             } else {
-                console.log("Aiming finished, setting new heading and turning off LED.");
-                ollie.setHeading(lastAimHeading).then(() => {
-                    ollie.setBackLed(0);
-                });
+                ollie.setHeading(lastAimHeading).then(() => ollie.setBackLed(0));
                 ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
             }
             updateModeIndicator();
         }
 
-        const speedUpPressed = btnState('SPEED_UP');
-        const speedDownPressed = btnState('SPEED_DOWN');
-        if ((speedUpPressed && speedDownPressed) && !(previousButtonStates[buttonMappings['SPEED_UP']] && previousButtonStates[buttonMappings['SPEED_DOWN']])) {
+        if ((getControlState('SPEED_UP') && getControlState('SPEED_DOWN')) && 
+            !( (previousAxesStates[controlMappings.SPEED_UP.index] > 0.5 || previousButtonStates[controlMappings.SPEED_UP.index]) && 
+               (previousAxesStates[controlMappings.SPEED_DOWN.index] > 0.5 || previousButtonStates[controlMappings.SPEED_DOWN.index]) )
+        ) {
             cycleMode();
         }
 
         if (isAiming) {
             handleAiming(gp);
         } else if (currentMode === 'trick') {
-            if (btnPressed('COLOR_X1')) doTrick('spinLeft');
-            if (btnPressed('COLOR_X3')) doTrick('flipBackward');
-            if (btnPressed('COLOR_X4')) doTrick('spinRight');
-            if (btnPressed('COLOR_X2')) doTrick('flipForward');
+            if (getControlPressed('COLOR_X1')) doTrick('spinLeft');
+            if (getControlPressed('COLOR_X3')) doTrick('flipBackward');
+            if (getControlPressed('COLOR_X4')) doTrick('spinRight');
+            if (getControlPressed('COLOR_X2')) doTrick('flipForward');
         } else {
-            if (btnPressed('COLOR_X2')) {
-                const { r, g, b } = hexToRgb(buttonColorMappings.x2);
-                applyColor(r, g, b);
-            }
-            if (btnPressed('SPEED_DOWN')) changeMaxSpeed(-1);
-            if (btnPressed('SPEED_UP')) changeMaxSpeed(1);
-            if (btnPressed('COLOR_X1')) { const { r, g, b } = hexToRgb(buttonColorMappings.x1); applyColor(r, g, b); }
-            if (btnPressed('COLOR_X3')) { const { r, g, b } = hexToRgb(buttonColorMappings.x3); applyColor(r, g, b); }
-            if (btnPressed('COLOR_X4')) { const { r, g, b } = hexToRgb(buttonColorMappings.x4); applyColor(r, g, b); }
+            if (getControlPressed('SPEED_DOWN')) changeMaxSpeed(-1);
+            if (getControlPressed('SPEED_UP')) changeMaxSpeed(1);
+            if (getControlPressed('COLOR_X1')) { const { r, g, b } = hexToRgb(buttonColorMappings.x1); applyColor(r, g, b); }
+            if (getControlPressed('COLOR_X2')) { const { r, g, b } = hexToRgb(buttonColorMappings.x2); applyColor(r, g, b); }
+            if (getControlPressed('COLOR_X3')) { const { r, g, b } = hexToRgb(buttonColorMappings.x3); applyColor(r, g, b); }
+            if (getControlPressed('COLOR_X4')) { const { r, g, b } = hexToRgb(buttonColorMappings.x4); applyColor(r, g, b); }
 
-            const x = gp.axes[0], y = -gp.axes[1], magnitude = Math.sqrt(x * x + y * y);
+            const x = currentAxesStates[controlMappings.AXIS_X.index] || 0;
+            const y = -currentAxesStates[controlMappings.AXIS_Y.index] || 0;
+            const magnitude = Math.sqrt(x * x + y * y);
+
             if (magnitude > joystickDeadzone) {
                 if (isEmergencyStopped) { isEmergencyStopped = false; console.log("E-Stop reset by joystick."); }
                 isDriving = true;
@@ -239,6 +264,7 @@ function gameLoop() {
     }
     
     previousButtonStates = [...currentButtonStates];
+    previousAxesStates = [...currentAxesStates];
     requestAnimationFrame(gameLoop);
 }
 
@@ -269,40 +295,27 @@ connectButton.addEventListener('click', async () => {
 });
 
 toggleTouchCheckbox.addEventListener('change', (e) => {
-    const isTouchActive = e.target.checked;
-    touchControlsPanel.classList.toggle('hidden', !isTouchActive);
+    isTouchModeActive = e.target.checked;
+    touchControlsPanel.classList.toggle('hidden', !isTouchModeActive);
 
-    if (isTouchActive) {
-        if (!joystickManager) {
-             joystickManager = nipplejs.create({ 
-                zone: joystickZone, 
-                mode: 'static', 
-                position: { left: '50%', top: '50%' }, 
-                color: 'white', 
-                size: 150 
-            });
-            joystickManager.on('move', (evt, data) => {
-                if (!ollie.device || gamepadIndex !== null || currentMode === 'trick' || isAiming) return;
-                isEmergencyStopped = false;
-                const speed = Math.min(Math.floor(data.distance * 3), 255);
-                const heading = Math.round(data.angle.degree);
-                ollie.currentHeading = heading;
-                let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
-                ollie.drive(heading, Math.round(speed * Math.min(maxSpeed, speedCap)));
-                isDriving = true;
-            });
-            joystickManager.on('end', () => { 
-                if (isDriving) { 
-                    ollie.drive(ollie.currentHeading, 0);
-                    isDriving = false; 
-                } 
-            });
-        }
-    } else {
-        if (joystickManager) {
-            joystickManager.destroy();
-            joystickManager = null;
-        }
+    if (isTouchModeActive && !joystickManager) {
+         joystickManager = nipplejs.create({ zone: joystickZone, mode: 'static', position: { left: '50%', top: '50%' }, color: 'white', size: 150 });
+        joystickManager.on('move', (evt, data) => {
+            if (!ollie.device || currentMode === 'trick' || isAiming) return;
+            isEmergencyStopped = false;
+            const speed = Math.min(Math.floor(data.distance * 3), 255);
+            const heading = Math.round(data.angle.degree);
+            ollie.currentHeading = heading;
+            let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
+            ollie.drive(heading, Math.round(speed * Math.min(maxSpeed, speedCap)));
+            isDriving = true;
+        });
+        joystickManager.on('end', () => { 
+            if (isDriving) { ollie.drive(ollie.currentHeading, 0); isDriving = false; } 
+        });
+    } else if (!isTouchModeActive && joystickManager) {
+        joystickManager.destroy();
+        joystickManager = null;
     }
 });
 
@@ -351,13 +364,13 @@ closeConfigButton.addEventListener('click', () => { configModal.classList.add('h
 document.querySelectorAll('.btn-config').forEach(btn => btn.addEventListener('click', (e) => {
     actionToMap = e.target.dataset.action;
     isWaitingForInput = true;
-    const logMessage = `[Config Debug] Wacht op invoer voor actie: ${actionToMap}...`;
+    const logMessage = `[Config Debug] Wacht op invoer voor ${actionToMap}... (Beweeg as of druk knop)`;
     configInstructions.textContent = logMessage;
     console.log(logMessage);
 }));
 deadzoneSlider.addEventListener('input', (e) => joystickDeadzone = parseFloat(e.target.value));
 Object.keys(colorInputs).forEach(key => colorInputs[key].addEventListener('input', (e) => buttonColorMappings[key] = e.target.value));
 
-window.addEventListener('gamepadconnected', (e) => { gamepadIndex = e.gamepad.index; updateGamepadStatus('Verbonden', 'connected'); previousButtonStates = Array(e.gamepad.buttons.length).fill(false); gameLoop(); });
+window.addEventListener('gamepadconnected', (e) => { gamepadIndex = e.gamepad.index; updateGamepadStatus('Verbonden', 'connected'); previousButtonStates = Array(e.gamepad.buttons.length).fill(false); previousAxesStates = Array(e.gamepad.axes.length).fill(0); gameLoop(); });
 window.addEventListener('gamepaddisconnected', (e) => { if (gamepadIndex === e.gamepad.index) { gamepadIndex = null; updateGamepadStatus('Niet verbonden', 'disconnected'); }});
 
