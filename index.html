@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ollie Web Controller</title>
+    <!-- Manifest for PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1e293b">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="icon" type="image/x-icon" href="img/favicon.ico">
     <style>
@@ -186,10 +189,13 @@
     </main>
 
     <!-- Config Modal -->
-    <div id="config-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-        <div class="bg-slate-800 rounded-2xl p-8 shadow-2xl w-full max-w-lg mx-4 space-y-6">
-            <h2 class="text-2xl font-bold text-center text-teal-400">Controller Instellen</h2>
-            <p id="config-instructions" class="text-center text-slate-400">Kies een actie en druk de gewenste knop in je controller.</p>
+    <div id="config-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 rounded-2xl p-6 shadow-2xl w-full max-w-lg mx-4 space-y-6 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center">
+                <h2 class="text-2xl font-bold text-teal-400">Controller Instellen</h2>
+                <button id="close-config-button" class="text-slate-400 hover:text-white text-3xl leading-none">&times;</button>
+            </div>
+            <p id="config-instructions" class="text-center text-slate-400">Kies een actie en druk de gewenste knop/as in.</p>
             
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <button data-action="SPEED_UP" id="map-SPEED_UP" class="btn-config">Snelheid +</button>
@@ -214,13 +220,27 @@
                 <input id="deadzone-slider" type="range" min="0.1" max="0.8" step="0.05" value="0.4" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
             </div>
 
-            <button id="close-config-button" class="btn-secondary w-full">Sluiten</button>
         </div>
     </div>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <script src="js/ollie.js" type="module"></script>
     <script src="js/main.js" type="module"></script>
+
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('service-worker.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('ServiceWorker registration failed: ', error);
+                    });
+            });
+        }
+    </script>
 </body>
 </html>
 
