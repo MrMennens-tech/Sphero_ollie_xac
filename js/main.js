@@ -36,6 +36,7 @@ let isTouchModeActive = false;
 let controlMappings = {
     SPEED_UP: { type: 'button', index: 4 },
     SPEED_DOWN: { type: 'button', index: 6 },
+    SPEED_DOWN_ALT: { type: 'axis', index: 11 }, // Default for Android Z-Axis Trigger
     COLOR_X1: { type: 'button', index: 2 },
     COLOR_X2: { type: 'button', index: 3 },
     COLOR_X3: { type: 'button', index: 0 },
@@ -168,7 +169,7 @@ function gameLoop() {
     const currentAxesStates = gp.axes.map(a => a);
 
     if (isWaitingForInput) {
-        const movedAxis = currentAxesStates.findIndex((val, i) => Math.abs(val) > 0.8 && Math.abs(previousAxesStates[i]) < 0.5);
+        const movedAxis = currentAxesStates.findIndex((val, i) => Math.abs(val - previousAxesStates[i]) > 0.8);
         if (movedAxis > -1) {
             console.log(`[Config Debug] AXIS movement detected on index: ${movedAxis} for action: ${actionToMap}`);
             controlMappings[actionToMap] = { type: 'axis', index: movedAxis };
@@ -182,7 +183,7 @@ function gameLoop() {
                 controlMappings[actionToMap] = { type: 'button', index: newPressIndex };
                 document.getElementById(`map-${actionToMap}`).textContent = `${actionToMap.replace(/_/g, ' ')} (B${newPressIndex})`;
                 isWaitingForInput = false;
-                configInstructions.textContent = 'Gekoppeld! Kies een andere actie.';
+                configInstructions.textContent = 'Knop gekoppeld!';
             }
         }
     } else {
@@ -190,7 +191,7 @@ function gameLoop() {
             const mapping = controlMappings[action];
             if (!mapping) return false;
             if (mapping.type === 'axis') {
-                return gp.axes[mapping.index] > 0.5;
+                return currentAxesStates[mapping.index] > 0.5;
             } else {
                 const btn = gp.buttons[mapping.index];
                 return btn ? (btn.pressed || btn.value > 0.5) : false;
@@ -199,11 +200,14 @@ function gameLoop() {
         const getControlPressed = (action) => {
             const mapping = controlMappings[action];
             if (!mapping) return false;
+            const currentState = getControlState(action);
+            let previousState;
             if (mapping.type === 'axis') {
-                return gp.axes[mapping.index] > 0.5 && previousAxesStates[mapping.index] < 0.5;
+                previousState = previousAxesStates[mapping.index] > 0.5;
             } else {
-                return (gp.buttons[mapping.index]?.pressed || gp.buttons[mapping.index]?.value > 0.5) && !previousButtonStates[mapping.index];
+                previousState = previousButtonStates[mapping.index];
             }
+            return currentState && !previousState;
         };
 
         if (getControlPressed('AIM_TOGGLE_RESET')) {
@@ -218,11 +222,13 @@ function gameLoop() {
             updateModeIndicator();
         }
 
-        if ((getControlState('SPEED_UP') && getControlState('SPEED_DOWN')) && 
-            !( (previousAxesStates[controlMappings.SPEED_UP.index] > 0.5 || previousButtonStates[controlMappings.SPEED_UP.index]) && 
-               (previousAxesStates[controlMappings.SPEED_DOWN.index] > 0.5 || previousButtonStates[controlMappings.SPEED_DOWN.index]) )
-        ) {
-            cycleMode();
+        if ((getControlState('SPEED_UP') && (getControlState('SPEED_DOWN') || getControlState('SPEED_DOWN_ALT')))) {
+            const prevUp = previousAxesStates[controlMappings.SPEED_UP.index] > 0.5 || previousButtonStates[controlMappings.SPEED_UP.index];
+            const prevDown = previousAxesStates[controlMappings.SPEED_DOWN.index] > 0.5 || previousButtonStates[controlMappings.SPEED_DOWN.index];
+            const prevDownAlt = previousAxesStates[controlMappings.SPEED_DOWN_ALT.index] > 0.5 || previousButtonStates[controlMappings.SPEED_DOWN_ALT.index];
+            if (!(prevUp && (prevDown || prevDownAlt))) {
+                cycleMode();
+            }
         }
 
         if (isAiming) {
@@ -233,7 +239,7 @@ function gameLoop() {
             if (getControlPressed('COLOR_X4')) doTrick('spinRight');
             if (getControlPressed('COLOR_X2')) doTrick('flipForward');
         } else {
-            if (getControlPressed('SPEED_DOWN')) changeMaxSpeed(-1);
+            if (getControlPressed('SPEED_DOWN') || getControlPressed('SPEED_DOWN_ALT')) changeMaxSpeed(-1);
             if (getControlPressed('SPEED_UP')) changeMaxSpeed(1);
             if (getControlPressed('COLOR_X1')) { const { r, g, b } = hexToRgb(buttonColorMappings.x1); applyColor(r, g, b); }
             if (getControlPressed('COLOR_X2')) { const { r, g, b } = hexToRgb(buttonColorMappings.x2); applyColor(r, g, b); }
