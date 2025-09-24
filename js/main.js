@@ -27,7 +27,6 @@ let isAiming = false, lastAimHeading = 0;
 let currentColor = { r: 0, g: 191, b: 255 };
 let buttonColorMappings = { x1: '#ff0000', x2: '#0000ff', x3: '#00ff00', x4: '#ffff00' };
 let joystickDeadzone = 0.4;
-let stopCommandInterval = null;
 let trickModeLEDInterval = null;
 let isEmergencyStopped = false;
 let isTouchModeActive = false;
@@ -36,7 +35,7 @@ let isTouchModeActive = false;
 let controlMappings = {
     SPEED_UP: { type: 'button', index: 4 },
     SPEED_DOWN: { type: 'button', index: 6 },
-    SPEED_DOWN_ALT: { type: 'axis', index: 11 }, // Default for Android Z-Axis Trigger
+    SPEED_DOWN_ALT: { type: 'axis', index: 11 },
     COLOR_X1: { type: 'button', index: 2 },
     COLOR_X2: { type: 'button', index: 3 },
     COLOR_X3: { type: 'button', index: 0 },
@@ -125,10 +124,6 @@ function cycleMode() {
     console.log(`Mode changed to: ${currentMode}`);
 
     if (currentMode === 'trick') {
-        if (stopCommandInterval) {
-            clearInterval(stopCommandInterval);
-            stopCommandInterval = null;
-        }
         if (trickModeLEDInterval) clearInterval(trickModeLEDInterval);
         let isPurple = false;
         trickModeLEDInterval = setInterval(() => {
@@ -149,7 +144,6 @@ function cycleMode() {
 // --- Main Gamepad Loop ---
 function gameLoop() {
     if (isTouchModeActive || gamepadIndex === null || !ollie.device || !ollie.device.gatt.connected) {
-        if (stopCommandInterval) { clearInterval(stopCommandInterval); stopCommandInterval = null; }
         requestAnimationFrame(gameLoop);
         return; 
     }
@@ -167,7 +161,7 @@ function gameLoop() {
 
     const currentButtonStates = gp.buttons.map(b => b.pressed || b.value > 0.5);
     const currentAxesStates = gp.axes.map(a => a);
-
+    
     if (isWaitingForInput) {
         const movedAxis = currentAxesStates.findIndex((val, i) => Math.abs(val - previousAxesStates[i]) > 0.8);
         if (movedAxis > -1) {
@@ -223,9 +217,10 @@ function gameLoop() {
         }
 
         if ((getControlState('SPEED_UP') && (getControlState('SPEED_DOWN') || getControlState('SPEED_DOWN_ALT')))) {
-            const prevUp = previousAxesStates[controlMappings.SPEED_UP.index] > 0.5 || previousButtonStates[controlMappings.SPEED_UP.index];
-            const prevDown = previousAxesStates[controlMappings.SPEED_DOWN.index] > 0.5 || previousButtonStates[controlMappings.SPEED_DOWN.index];
-            const prevDownAlt = previousAxesStates[controlMappings.SPEED_DOWN_ALT.index] > 0.5 || previousButtonStates[controlMappings.SPEED_DOWN_ALT.index];
+            const prevUp = (controlMappings.SPEED_UP.type === 'axis' ? previousAxesStates[controlMappings.SPEED_UP.index] > 0.5 : previousButtonStates[controlMappings.SPEED_UP.index]);
+            const prevDown = (controlMappings.SPEED_DOWN.type === 'axis' ? previousAxesStates[controlMappings.SPEED_DOWN.index] > 0.5 : previousButtonStates[controlMappings.SPEED_DOWN.index]);
+            const prevDownAlt = controlMappings.SPEED_DOWN_ALT && (controlMappings.SPEED_DOWN_ALT.type === 'axis' ? previousAxesStates[controlMappings.SPEED_DOWN_ALT.index] > 0.5 : previousButtonStates[controlMappings.SPEED_DOWN_ALT.index]);
+
             if (!(prevUp && (prevDown || prevDownAlt))) {
                 cycleMode();
             }
@@ -253,7 +248,6 @@ function gameLoop() {
             if (magnitude > joystickDeadzone) {
                 if (isEmergencyStopped) { isEmergencyStopped = false; console.log("E-Stop reset by joystick."); }
                 isDriving = true;
-                if(stopCommandInterval) { clearInterval(stopCommandInterval); stopCommandInterval = null; }
                 let speed = (magnitude > 0.9) ? 255 : (magnitude > 0.65) ? 170 : 85;
                 const heading = Math.round((Math.atan2(x, y) * (180 / Math.PI) + 360) % 360);
                 ollie.currentHeading = heading;
@@ -261,10 +255,7 @@ function gameLoop() {
                 ollie.drive(heading, Math.round(speed * Math.min(maxSpeed, speedCap)));
             } else if (isDriving) {
                 isDriving = false;
-                if (!stopCommandInterval) { 
-                    ollie.drive(ollie.currentHeading, 0);
-                    stopCommandInterval = setInterval(() => ollie.drive(ollie.currentHeading, 0), 100); 
-                }
+                ollie.stop();
             }
         }
     }
@@ -317,7 +308,7 @@ toggleTouchCheckbox.addEventListener('change', (e) => {
             isDriving = true;
         });
         joystickManager.on('end', () => { 
-            if (isDriving) { ollie.drive(ollie.currentHeading, 0); isDriving = false; } 
+            if (isDriving) { ollie.stop(); isDriving = false; } 
         });
     } else if (!isTouchModeActive && joystickManager) {
         joystickManager.destroy();
