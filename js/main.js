@@ -107,7 +107,6 @@ function applyColor(r, g, b, internalCall = false) {
 }
 async function doTrick(trickName) {
     if (!ollie.device) return;
-    console.log(`[Trick] Performing: ${trickName}`);
     isEmergencyStopped = false;
     const p = 255, M = ollie.Motors;
     const duration = trickName.includes('spin') ? 800 : 400;
@@ -202,13 +201,21 @@ function gameLoop() {
         };
         const btnPressed = (action) => btnState(action) && !previousButtonStates[buttonMappings[action]];
 
+        // Universal Reset Button
+        if (btnPressed('CYCLE_MODE')) {
+             if (isEmergencyStopped) {
+                isEmergencyStopped = false;
+                console.log("Emergency stop reset by button.");
+            }
+            ollie.setBackLed(0);
+            console.log("Back LED turned off by button.");
+        }
+
         const speedUpPressed = btnState('SPEED_UP');
         const speedDownPressed = btnState('SPEED_DOWN');
         if ((speedUpPressed && speedDownPressed) && !(previousButtonStates[buttonMappings['SPEED_UP']] && previousButtonStates[buttonMappings['SPEED_DOWN']])) {
             cycleMode();
         }
-        
-        if (btnPressed('CYCLE_MODE')) cycleMode();
 
         if (currentMode === 'trick') {
             if (btnPressed('COLOR_X1')) doTrick('spinLeft');
@@ -217,17 +224,14 @@ function gameLoop() {
             if (btnPressed('COLOR_X2_AIM')) doTrick('flipForward');
         } else if (isAiming) {
             handleAiming(gp);
-            // Use an async function to handle the release properly with await
-            const handleAimRelease = async () => {
-                if (!btnState('COLOR_X2_AIM')) {
-                    isAiming = false;
-                    await ollie.setHeading(lastAimHeading);
-                    await ollie.setBackLed(0);
-                    await ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
-                    updateModeIndicator();
-                }
-            };
-            handleAimRelease();
+            if (!btnState('COLOR_X2_AIM')) {
+                isAiming = false;
+                ollie.setHeading(lastAimHeading).then(() => {
+                    ollie.setBackLed(0);
+                });
+                ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
+                updateModeIndicator();
+            }
         } else {
             if (btnState('COLOR_X2_AIM') && !previousButtonStates[buttonMappings['COLOR_X2_AIM']]) {
                 aimButtonPressTime = Date.now();
@@ -259,13 +263,13 @@ function gameLoop() {
                 if(stopCommandInterval) { clearInterval(stopCommandInterval); stopCommandInterval = null; }
                 let speed = (magnitude > 0.9) ? 255 : (magnitude > 0.65) ? 170 : 85;
                 const heading = Math.round((Math.atan2(x, y) * (180 / Math.PI) + 360) % 360);
-                ollie.currentHeading = heading; // Update heading continuously
+                ollie.currentHeading = heading;
                 let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
                 ollie.drive(heading, Math.round(speed * Math.min(maxSpeed, speedCap)));
             } else if (isDriving) {
                 isDriving = false;
                 if (!stopCommandInterval) { 
-                    ollie.drive(ollie.currentHeading, 0); // Maintain heading
+                    ollie.drive(ollie.currentHeading, 0);
                     stopCommandInterval = setInterval(() => ollie.drive(ollie.currentHeading, 0), 100); 
                 }
             }
@@ -279,7 +283,6 @@ function gameLoop() {
 // --- Event Listeners ---
 connectButton.addEventListener('click', async () => {
     if (ollie.device?.gatt.connected) {
-        isEmergencyStopped = false;
         if (trickModeLEDInterval) clearInterval(trickModeLEDInterval);
         try { 
             await ollie.sleep(); 
@@ -297,6 +300,8 @@ connectButton.addEventListener('click', async () => {
             await ollie.connect();
             await ollie.init();
             updateOllieStatus('Verbonden', 'connected');
+            isEmergencyStopped = false;
+            console.log("Connection successful, emergency stop flag reset.");
         } catch (e) { updateOllieStatus('Verbinding mislukt', 'disconnected'); }
     }
 });
