@@ -7,7 +7,8 @@ const gamepadStatus = document.getElementById('gamepad-status'), gamepadStatusDo
 const speedIndicator = document.getElementById('speed-indicator'), modeIndicator = document.getElementById('mode-indicator');
 const toggleTouchCheckbox = document.getElementById('toggle-touch-checkbox');
 const toggleExpertCheckbox = document.getElementById('toggle-expert-checkbox');
-const touchControlsPanel = document.getElementById('touch-controls'), touchTricksPanel = document.getElementById('touch-tricks');
+const touchControlsPanel = document.getElementById('touch-controls-panel'); // Corrected ID
+const touchTricksPanel = document.getElementById('touch-tricks');
 const joystickZone = document.getElementById('joystick-zone');
 const openConfigButton = document.getElementById('open-config-button'), configModal = document.getElementById('config-modal'), closeConfigButton = document.getElementById('close-config-button');
 const configInstructions = document.getElementById('config-instructions');
@@ -75,12 +76,16 @@ joystickManager.on('move', (evt, data) => {
     isEmergencyStopped = false; // Reset emergency stop on user input
     const speed = Math.min(Math.floor(data.distance * 3), 255);
     const heading = Math.round(data.angle.degree);
+    ollie.currentHeading = heading; // Update heading continuously
     let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
     ollie.drive(heading, Math.round(speed * Math.min(maxSpeed, speedCap)));
     isDriving = true;
 });
 joystickManager.on('end', () => { 
-    if (isDriving) { ollie.drive(0, 0); isDriving = false; } 
+    if (isDriving) { 
+        ollie.drive(ollie.currentHeading, 0); // Maintain heading on stop
+        isDriving = false; 
+    } 
 });
 
 // --- Core Logic ---
@@ -193,6 +198,7 @@ function gameLoop() {
         } else if (isAiming) {
             handleAiming(gp);
             if (!btnState('COLOR_X2_AIM')) {
+                console.log("Aiming finished, turning off LED.");
                 isAiming = false;
                 ollie.setHeading(lastAimHeading);
                 ollie.setBackLed(0);
@@ -230,16 +236,20 @@ function gameLoop() {
                 if(stopCommandInterval) { clearInterval(stopCommandInterval); stopCommandInterval = null; }
                 let speed = (magnitude > 0.9) ? 255 : (magnitude > 0.65) ? 170 : 85;
                 const heading = Math.round((Math.atan2(x, y) * (180 / Math.PI) + 360) % 360);
+                ollie.currentHeading = heading; // Update heading continuously
                 let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
                 ollie.drive(heading, Math.round(speed * Math.min(maxSpeed, speedCap)));
             } else if (isDriving) {
                 isDriving = false;
-                if (!stopCommandInterval) { ollie.drive(0, 0); stopCommandInterval = setInterval(() => ollie.drive(0, 0), 100); }
+                if (!stopCommandInterval) { 
+                    ollie.drive(ollie.currentHeading, 0); // Maintain heading
+                    stopCommandInterval = setInterval(() => ollie.drive(ollie.currentHeading, 0), 100); 
+                }
             }
         }
     }
     
-    previousButtonStates = [...currentButtonStates]; // Create a new copy
+    previousButtonStates = [...currentButtonStates];
     requestAnimationFrame(gameLoop);
 }
 
@@ -306,7 +316,7 @@ document.getElementById('touch-aim').addEventListener('touchend', (e) => {
     e.preventDefault(); 
     if(isAiming) { 
         isAiming = false; 
-        ollie.setHeading(ollie.currentHeading); // Use last heading from joystick
+        ollie.setHeading(ollie.currentHeading); 
         ollie.setBackLed(0); 
         updateModeIndicator(); 
     } 
