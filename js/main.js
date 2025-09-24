@@ -73,17 +73,17 @@ const joystickManager = nipplejs.create({
 });
 joystickManager.on('move', (evt, data) => {
     if (!ollie.device || gamepadIndex !== null || currentMode === 'trick' || isAiming) return;
-    isEmergencyStopped = false; // Reset emergency stop on user input
+    isEmergencyStopped = false;
     const speed = Math.min(Math.floor(data.distance * 3), 255);
     const heading = Math.round(data.angle.degree);
-    ollie.currentHeading = heading; // Update heading continuously
+    ollie.currentHeading = heading;
     let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
     ollie.drive(heading, Math.round(speed * Math.min(maxSpeed, speedCap)));
     isDriving = true;
 });
 joystickManager.on('end', () => { 
     if (isDriving) { 
-        ollie.drive(ollie.currentHeading, 0); // Maintain heading on stop
+        ollie.drive(ollie.currentHeading, 0);
         isDriving = false; 
     } 
 });
@@ -115,19 +115,31 @@ async function doTrick(trickName) {
     await ollie.setRawMotors(...actions[trickName]);
     setTimeout(() => ollie.setRawMotors(M.off, 0, M.off, 0), duration);
 }
+
 const handleAiming = (gp) => {
-    const x = gp.axes[0], y = -gp.axes[1];
-    if (Math.sqrt(x * x + y * y) > 0.2) {
+    const x = gp.axes[0];
+    const y = -gp.axes[1];
+    const deadzone = 0.2;
+    const spinSpeed = 80;
+
+    if (Math.sqrt(x*x + y*y) > deadzone) {
         lastAimHeading = Math.round((Math.atan2(x, y) * (180 / Math.PI) + 360) % 360);
-        ollie.setRawMotors(ollie.Motors.forward, 80, ollie.Motors.reverse, 80);
-    } else { ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0); }
+        if (x > deadzone) {
+            ollie.setRawMotors(ollie.Motors.forward, spinSpeed, ollie.Motors.reverse, spinSpeed);
+        } else if (x < -deadzone) {
+            ollie.setRawMotors(ollie.Motors.reverse, spinSpeed, ollie.Motors.forward, spinSpeed);
+        } else {
+             ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
+        }
+    } else {
+        ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
+    }
 };
+
 function cycleMode() {
-    const oldMode = currentMode;
     currentMode = (currentMode === 'normal') ? 'trick' : 'normal';
     console.log(`Mode changed to: ${currentMode}`);
 
-    // If switching TO trick mode, clear any lingering stop intervals from driving mode
     if (currentMode === 'trick') {
         if (stopCommandInterval) {
             clearInterval(stopCommandInterval);
@@ -142,7 +154,7 @@ function cycleMode() {
             else { ollie.setColor(128, 0, 128); }
             isPurple = !isPurple;
         }, 500);
-    } else { // If switching back to normal mode
+    } else {
         if (trickModeLEDInterval) { clearInterval(trickModeLEDInterval); trickModeLEDInterval = null; }
         if (ollie.device) { ollie.setHeading(0); console.log("Exited trick mode, recalibrating heading."); }
         applyColor(currentColor.r, currentColor.g, currentColor.b, true); 
@@ -205,14 +217,17 @@ function gameLoop() {
             if (btnPressed('COLOR_X2_AIM')) doTrick('flipForward');
         } else if (isAiming) {
             handleAiming(gp);
-            if (!btnState('COLOR_X2_AIM')) {
-                console.log("Aiming finished, turning off LED.");
-                isAiming = false;
-                ollie.setHeading(lastAimHeading);
-                ollie.setBackLed(0);
-                ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
-                updateModeIndicator();
-            }
+            // Use an async function to handle the release properly with await
+            const handleAimRelease = async () => {
+                if (!btnState('COLOR_X2_AIM')) {
+                    isAiming = false;
+                    await ollie.setHeading(lastAimHeading);
+                    await ollie.setBackLed(0);
+                    await ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
+                    updateModeIndicator();
+                }
+            };
+            handleAimRelease();
         } else {
             if (btnState('COLOR_X2_AIM') && !previousButtonStates[buttonMappings['COLOR_X2_AIM']]) {
                 aimButtonPressTime = Date.now();
