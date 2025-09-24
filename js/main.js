@@ -72,6 +72,7 @@ const joystickManager = nipplejs.create({
 });
 joystickManager.on('move', (evt, data) => {
     if (!ollie.device || gamepadIndex !== null || currentMode === 'trick' || isAiming) return;
+    isEmergencyStopped = false; // Reset emergency stop on user input
     const speed = Math.min(Math.floor(data.distance * 3), 255);
     const heading = Math.round(data.angle.degree);
     let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
@@ -88,7 +89,7 @@ function changeMaxSpeed(amount) {
     if (currentMode === 'trick') speedCap = 1.0;
     
     let newSpeed = maxSpeed + SPEED_STEP * amount;
-    maxSpeed = Math.max(0.1, Math.min(newSpeed, speedCap)); // Clamp between 0.1 and the current speed cap
+    maxSpeed = Math.max(0.1, Math.min(newSpeed, speedCap));
     updateSpeedIndicator();
     applyColor(currentColor.r, currentColor.g, currentColor.b, true);
 };
@@ -102,6 +103,7 @@ function applyColor(r, g, b, internalCall = false) {
 async function doTrick(trickName) {
     if (!ollie.device) return;
     console.log(`[Trick] Attempting to perform: ${trickName}`);
+    isEmergencyStopped = false;
     const p = 255, M = ollie.Motors;
     const duration = trickName.includes('spin') ? 800 : 400;
     const actions = { spinLeft: [M.reverse, p, M.forward, p], spinRight: [M.forward, p, M.reverse, p], flipForward: [M.forward, p, M.forward, p], flipBackward: [M.reverse, p, M.reverse, p] };
@@ -116,7 +118,6 @@ const handleAiming = (gp) => {
     } else { ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0); }
 };
 function cycleMode() {
-    const modes = ['normal', 'trick'];
     currentMode = (currentMode === 'normal') ? 'trick' : 'normal';
 
     if (currentMode === 'trick') {
@@ -130,10 +131,9 @@ function cycleMode() {
         }, 500);
     } else {
         if (trickModeLEDInterval) { clearInterval(trickModeLEDInterval); trickModeLEDInterval = null; }
+        if (ollie.device) { ollie.setHeading(0); console.log("Exited trick mode, recalibrating heading."); }
         applyColor(currentColor.r, currentColor.g, currentColor.b, true); 
     }
-
-    if (currentMode === 'normal' && ollie.device) { ollie.setHeading(0); console.log("Exited trick mode, recalibrating heading."); }
     updateModeIndicator();
     updateSpeedIndicator();
 }
@@ -141,8 +141,7 @@ function cycleMode() {
 // --- Main Gamepad Loop ---
 function gameLoop() {
     if (gamepadIndex === null || !ollie.device || !ollie.device.gatt.connected) {
-        if (stopCommandInterval) clearInterval(stopCommandInterval);
-        stopCommandInterval = null;
+        if (stopCommandInterval) { clearInterval(stopCommandInterval); stopCommandInterval = null; }
         return; 
     }
     
@@ -159,6 +158,7 @@ function gameLoop() {
 
     const currentButtonStates = gp.buttons.map(b => b.pressed || b.value > 0.5);
 
+    // --- Button Mapping Logic ---
     if (isWaitingForInput) {
         const newPressIndex = currentButtonStates.findIndex((state, i) => state && !previousButtonStates[i]);
         if (newPressIndex > -1) {
@@ -168,21 +168,18 @@ function gameLoop() {
             isWaitingForInput = false;
             configInstructions.textContent = 'Gekoppeld! Kies een andere actie.';
         }
-    } else {
+    } else { // --- Main Control Logic ---
         const getBtn = (action) => gp.buttons[buttonMappings[action]];
         const btnState = (action) => {
             const btn = getBtn(action);
             if (!btn) return false;
-            if (action === 'SPEED_DOWN' || action === 'SPEED_UP') { return btn.value > 0.5; }
-            return btn.pressed;
+            return btn.pressed || btn.value > 0.5;
         };
         const btnPressed = (action) => btnState(action) && !previousButtonStates[buttonMappings[action]];
 
         const speedUpPressed = btnState('SPEED_UP');
         const speedDownPressed = btnState('SPEED_DOWN');
-        const prevSpeedUpPressed = previousButtonStates[buttonMappings['SPEED_UP']];
-        const prevSpeedDownPressed = previousButtonStates[buttonMappings['SPEED_DOWN']];
-        if ((speedUpPressed && speedDownPressed) && !(prevSpeedUpPressed && prevSpeedDownPressed)) {
+        if ((speedUpPressed && speedDownPressed) && !(previousButtonStates[buttonMappings['SPEED_UP']] && previousButtonStates[buttonMappings['SPEED_DOWN']])) {
             cycleMode();
         }
         
@@ -196,7 +193,6 @@ function gameLoop() {
         } else if (isAiming) {
             handleAiming(gp);
             if (!btnState('COLOR_X2_AIM')) {
-                console.log("Aiming finished, turning off LED.");
                 isAiming = false;
                 ollie.setHeading(lastAimHeading);
                 ollie.setBackLed(0);
@@ -204,9 +200,22 @@ function gameLoop() {
                 updateModeIndicator();
             }
         } else {
-            if (btnState('COLOR_X2_AIM') && !previousButtonStates[buttonMappings['COLOR_X2_AIM']]) aimButtonPressTime = Date.now();
-            if (btnState('COLOR_X2_AIM') && Date.now() - aimButtonPressTime > AIM_HOLD_DURATION) { isAiming = true; ollie.setBackLed(255); updateModeIndicator(); }
-            if (!btnState('COLOR_X2_AIM') && previousButtonStates[buttonMappings['COLOR_X2_AIM']]) { if (Date.now() - aimButtonPressTime < AIM_HOLD_DURATION) { const { r, g, b } = hexToRgb(buttonColorMappings.x2); applyColor(r, g, b); } }
+            if (btnState('COLOR_X2_AIM') && !previousButtonStates[buttonMappings['COLOR_X2_AIM']]) {
+                aimButtonPressTime = Date.now();
+            }
+            if (btnState('COLOR_X2_AIM') && (Date.now() - aimButtonPressTime > AIM_HOLD_DURATION)) {
+                if (!isAiming) {
+                    isAiming = true;
+                    ollie.setBackLed(255);
+                    updateModeIndicator();
+                }
+            }
+            if (!btnState('COLOR_X2_AIM') && previousButtonStates[buttonMappings['COLOR_X2_AIM']]) {
+                if (Date.now() - aimButtonPressTime < AIM_HOLD_DURATION) {
+                    const { r, g, b } = hexToRgb(buttonColorMappings.x2);
+                    applyColor(r, g, b);
+                }
+            }
 
             if (btnPressed('SPEED_DOWN')) changeMaxSpeed(-1);
             if (btnPressed('SPEED_UP')) changeMaxSpeed(1);
@@ -216,10 +225,7 @@ function gameLoop() {
 
             const x = gp.axes[0], y = -gp.axes[1], magnitude = Math.sqrt(x * x + y * y);
             if (magnitude > joystickDeadzone) {
-                if (isEmergencyStopped) {
-                    isEmergencyStopped = false;
-                    console.log("Emergency stop reset by joystick movement.");
-                }
+                if (isEmergencyStopped) { isEmergencyStopped = false; console.log("E-Stop reset by joystick."); }
                 isDriving = true;
                 if(stopCommandInterval) { clearInterval(stopCommandInterval); stopCommandInterval = null; }
                 let speed = (magnitude > 0.9) ? 255 : (magnitude > 0.65) ? 170 : 85;
@@ -233,7 +239,7 @@ function gameLoop() {
         }
     }
     
-    previousButtonStates = currentButtonStates;
+    previousButtonStates = [...currentButtonStates]; // Create a new copy
     requestAnimationFrame(gameLoop);
 }
 
@@ -290,7 +296,6 @@ emergencyStopButton.addEventListener('click', () => {
     }
 });
 
-// Corrected Touch Aim logic (no delay)
 document.getElementById('touch-aim').addEventListener('touchstart', (e) => { 
     e.preventDefault(); 
     isAiming = true; 
