@@ -3,7 +3,7 @@
  * This file contains the Ollie class for connecting and sending commands to the Sphero Ollie robot.
  * This version is based on the original work by binomed, adapted for this project.
  *
- * VERBETERING: De 'stop()' functie is aangepast om een actief rem-commando te gebruiken.
+ * VERBETERING: De 'stop()' functie is aangepast om een actief rem-commando te gebruiken en te wachten als het apparaat bezet is.
  */
 export class Ollie {
     constructor() {
@@ -94,9 +94,13 @@ export class Ollie {
     // --- Public Command Methods ---
     drive(heading, speed) { this.currentHeading = heading; return this._sendCommand(0x02, 0x30, new Uint8Array([speed, heading >> 8, heading & 0xFF, 1])); }
     
-    // AANGEPAST: Gebruikt nu de 'brake' modus voor een harde stop.
-    stop() { 
-        console.log("Sending HARD BRAKE command.");
+    // AANGEPAST: Wacht nu tot de Ollie niet meer 'bezig' is voordat het rem-commando wordt verstuurd.
+    async stop() {
+        // Wacht tot een eventueel lopend commando is afgerond.
+        while (this.isBusy) {
+            await new Promise(resolve => setTimeout(resolve, 10)); // Wacht 10ms
+        }
+        console.log("Sending GUARANTEED HARD BRAKE command.");
         return this.setRawMotors(this.Motors.brake, 0, this.Motors.brake, 0); 
     }
 
@@ -150,7 +154,7 @@ export class Ollie {
 
     // --- Private BLE Methods ---
     async _sendCommand(did, cid, data) {
-        if (this.isBusy) return Promise.resolve();
+        if (this.isBusy) return Promise.resolve(); // Negeer commando als de verbinding bezet is.
         this.isBusy = true;
 
         const seq = this.sequence & 255; this.sequence++;
@@ -168,7 +172,9 @@ export class Ollie {
                 await this.controlCharacteristic.writeValue(packets);
             } else { console.error('Cannot send command: Control Characteristic not available.'); }
         } catch (error) { console.error('Failed to send command:', error); } 
-        finally { this.isBusy = false; }
+        finally { 
+            this.isBusy = false; 
+        }
     }
 
     async _writeCharacteristic(serviceUID, characteristicUID, value) {
@@ -178,3 +184,4 @@ export class Ollie {
         return characteristic.writeValue(value);
     }
 }
+
