@@ -106,7 +106,7 @@
 
     <main class="container mx-auto p-4 flex-grow grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        <!-- Left Column: Connection & Status -->
+        <!-- Left Column: Connection & Status & Main Toggles -->
         <div class="lg:col-span-1 bg-slate-800/50 rounded-2xl p-6 shadow-2xl flex flex-col gap-6 h-fit">
             <div id="connection-panel">
                 <button id="connect-button" class="w-full text-center p-3 rounded-lg font-bold text-2xl py-4 transition-all transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 shadow-lg bg-teal-500 hover:bg-teal-600 text-slate-900">
@@ -123,57 +123,56 @@
                     <p id="gamepad-status">Gamepad: Niet verbonden</p>
                 </div>
             </div>
-            <button id="emergency-stop-button" class="hidden w-full text-center p-3 rounded-lg font-bold text-xl transition-all transform hover:scale-105 bg-red-600 hover:bg-red-500 text-white shadow-lg animate-pulse">
-                NOODSTOP
-            </button>
-        </div>
 
-        <!-- Middle Column: Main Controls -->
-        <div class="lg:col-span-1 flex flex-col items-center gap-6">
-            <!-- Touch Mode Toggle -->
-            <div class="w-full bg-slate-800/50 rounded-2xl p-4 shadow-2xl flex items-center justify-center">
-                <label for="toggle-touch-checkbox" class="font-medium text-slate-300 mr-3">Touch Modus</label>
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" id="toggle-touch-checkbox" class="sr-only peer">
-                    <div class="w-11 h-6 bg-slate-700 rounded-full peer peer-focus:ring-4 peer-focus:ring-teal-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
-                </label>
-            </div>
-
-            <!-- Touch Controls Panel (conditionally shown) -->
-            <div id="touch-controls-panel" class="hidden w-full bg-slate-800/50 rounded-2xl p-6 shadow-2xl flex flex-col items-center justify-center gap-4">
-                <div id="joystick-zone" class="relative w-48 h-48 rounded-full bg-slate-700/50"></div>
-                <div class="grid grid-cols-2 gap-4 w-full">
-                     <button data-action="speed-up" class="btn-touch">Snelheid +</button>
-                     <button data-action="speed-down" class="btn-touch">Snelheid -</button>
+            <!-- Main Toggles & Config -->
+            <div class="space-y-4 pt-4 border-t border-slate-700">
+                <div class="flex items-center justify-between">
+                    <label for="toggle-touch-checkbox" class="font-medium text-slate-300">Touch Modus</label>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="toggle-touch-checkbox" class="sr-only peer">
+                        <div class="w-11 h-6 bg-slate-700 rounded-full peer peer-focus:ring-4 peer-focus:ring-teal-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                    </label>
                 </div>
-                <button data-action="cycle-mode" class="btn-touch w-full">Wissel Modus</button>
-                 <button id="touch-aim" class="btn-touch w-full">Richten</button>
-                <div id="touch-tricks" class="hidden grid-cols-2 gap-4 w-full">
-                    <button data-trick="spinLeft" class="btn-touch">Spin Links</button>
-                    <button data-trick="spinRight" class="btn-touch">Spin Rechts</button>
-                    <button data-trick="flipForward" class="btn-touch">Flip Vooruit</button>
-                    <button data-trick="flipBackward" class="btn-touch">Flip Achteruit</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Right Column: Settings & Info -->
-        <div class="lg:col-span-1 bg-slate-800/50 rounded-2xl p-6 shadow-2xl flex flex-col gap-6 h-fit">
-            <div id="info-panel" class="space-y-4">
-                 <div id="mode-indicator" class="w-full text-center p-3 rounded-lg font-medium text-lg shadow-lg bg-slate-800">Modus: Normaal</div>
-                 <div id="speed-indicator" class="w-full text-center p-3 rounded-lg font-medium text-lg shadow-lg bg-slate-800">Max Snelheid: 20%</div>
-            </div>
-             <div id="settings-panel" class="space-y-4">
-                <!-- Expert Mode Toggle -->
-                <div class="flex items-center justify-center space-x-3 p-3 bg-slate-800 rounded-lg">
+                <div class="flex items-center justify-between">
                     <label for="toggle-expert-checkbox" class="font-medium text-slate-300">Expert Modus</label>
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" id="toggle-expert-checkbox" class="sr-only peer">
                         <div class="w-11 h-6 bg-slate-700 rounded-full peer peer-focus:ring-4 peer-focus:ring-green-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
                     </label>
                 </div>
-                
-                <div class="space-y-2 pt-4">
+                <button id="open-config-button" class="btn-secondary w-full">Stel Controller In</button>
+            </div>
+
+            <button id="emergency-stop-button" class="hidden w-full text-center p-3 rounded-lg font-bold text-xl transition-all transform hover:scale-105 bg-red-600 hover:bg-red-500 text-white shadow-lg animate-pulse">
+                NOODSTOP
+            </button>
+        </div>
+
+        <!-- Middle Column: Touch Controls Panel -->
+        <div id="touch-controls-panel" class="hidden lg:col-span-1 bg-slate-800/50 rounded-2xl p-6 shadow-2xl flex flex-col items-center justify-center gap-4">
+            <div id="joystick-zone" class="relative w-48 h-48 rounded-full bg-slate-700/50"></div>
+            <div class="grid grid-cols-2 gap-4 w-full">
+                 <button data-action="speed-up" class="btn-touch">Snelheid +</button>
+                 <button data-action="speed-down" class="btn-touch">Snelheid -</button>
+            </div>
+            <button data-action="cycle-mode" class="btn-touch w-full">Wissel Modus</button>
+             <button id="touch-aim" class="btn-touch w-full">Richten</button>
+            <div id="touch-tricks" class="hidden grid grid-cols-2 gap-4 w-full">
+                <button data-trick="spinLeft" class="btn-touch">Spin Links</button>
+                <button data-trick="spinRight" class="btn-touch">Spin Rechts</button>
+                <button data-trick="flipForward" class="btn-touch">Flip Vooruit</button>
+                <button data-trick="flipBackward" class="btn-touch">Flip Achteruit</button>
+            </div>
+        </div>
+
+        <!-- Right Column: Info & Color Settings -->
+        <div class="lg:col-span-1 bg-slate-800/50 rounded-2xl p-6 shadow-2xl flex flex-col gap-6 h-fit">
+            <div id="info-panel" class="space-y-4">
+                 <div id="mode-indicator" class="w-full text-center p-3 rounded-lg font-medium text-lg shadow-lg bg-slate-800">Modus: Normaal</div>
+                 <div id="speed-indicator" class="w-full text-center p-3 rounded-lg font-medium text-lg shadow-lg bg-slate-800">Max Snelheid: 20%</div>
+            </div>
+            <div id="settings-panel" class="space-y-4">
+                <div class="space-y-2 pt-4 border-t border-slate-700">
                     <h3 class="text-lg font-semibold text-center text-slate-300">Kleuren Knoppen</h3>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 items-center">
                          <label for="color-x1" class="text-center">X1 (A)</label><input type="color" id="color-x1" value="#ff0000">
@@ -182,10 +181,8 @@
                          <label for="color-x4" class="text-center">X4 (Y)</label><input type="color" id="color-x4" value="#ffff00">
                     </div>
                 </div>
-                <button id="open-config-button" class="btn-secondary w-full">Stel Controller In</button>
             </div>
         </div>
-
     </main>
 
     <!-- Config Modal -->
