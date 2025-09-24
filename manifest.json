@@ -1,0 +1,21 @@
+{
+  "name": "Ollie Web Controller",
+  "short_name": "Ollie Controller",
+  "description": "Een web-app om een Sphero Ollie te besturen met een USB Gamepad, speciaal voor de Xbox Adaptive Controller.",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#14b8a6",
+  "icons": [
+    {
+      "src": "img/icon-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "img/icon-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}
