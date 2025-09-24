@@ -18,6 +18,7 @@ const emergencyStopButton = document.getElementById('emergency-stop-button');
 
 // --- State Variables ---
 const ollie = new Ollie();
+let joystickManager = null; // Hold the joystick instance
 let gamepadIndex = null, isDriving = false, previousButtonStates = [];
 let maxSpeed = 0.20, NORMAL_MAX_SPEED = 0.40, EXPERT_MAX_SPEED = 0.60, SPEED_STEP = 0.05;
 let currentMode = 'normal'; // 'normal', 'trick'
@@ -62,31 +63,6 @@ function updateModeIndicator() {
     updateUI(modeIndicator, `Modus: ${text}`, `w-full text-center p-3 rounded-lg font-medium text-lg shadow-lg ${className}`);
     touchTricksPanel.classList.toggle('hidden', currentMode !== 'trick');
 }
-
-// --- On-screen Joystick ---
-const joystickManager = nipplejs.create({ 
-    zone: joystickZone, 
-    mode: 'static', 
-    position: { left: '50%', top: '50%' }, 
-    color: 'white', 
-    size: 150 
-});
-joystickManager.on('move', (evt, data) => {
-    if (!ollie.device || gamepadIndex !== null || currentMode === 'trick' || isAiming) return;
-    isEmergencyStopped = false;
-    const speed = Math.min(Math.floor(data.distance * 3), 255);
-    const heading = Math.round(data.angle.degree);
-    ollie.currentHeading = heading;
-    let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
-    ollie.drive(heading, Math.round(speed * Math.min(maxSpeed, speedCap)));
-    isDriving = true;
-});
-joystickManager.on('end', () => { 
-    if (isDriving) { 
-        ollie.drive(ollie.currentHeading, 0);
-        isDriving = false; 
-    } 
-});
 
 // --- Core Logic ---
 function changeMaxSpeed(amount) {
@@ -182,7 +158,6 @@ function gameLoop() {
 
     const currentButtonStates = gp.buttons.map(b => b.pressed || b.value > 0.5);
 
-    // --- Button Mapping Logic ---
     if (isWaitingForInput) {
         const newPressIndex = currentButtonStates.findIndex((state, i) => state && !previousButtonStates[i]);
         if (newPressIndex > -1) {
@@ -192,7 +167,7 @@ function gameLoop() {
             isWaitingForInput = false;
             configInstructions.textContent = 'Gekoppeld! Kies een andere actie.';
         }
-    } else { // --- Main Control Logic ---
+    } else {
         const getBtn = (action) => gp.buttons[buttonMappings[action]];
         const btnState = (action) => {
             const btn = getBtn(action);
@@ -201,7 +176,6 @@ function gameLoop() {
         };
         const btnPressed = (action) => btnState(action) && !previousButtonStates[buttonMappings[action]];
 
-        // Universal Reset Button
         if (btnPressed('CYCLE_MODE')) {
              if (isEmergencyStopped) {
                 isEmergencyStopped = false;
@@ -309,6 +283,39 @@ connectButton.addEventListener('click', async () => {
 toggleTouchCheckbox.addEventListener('change', (e) => {
     const isTouchActive = e.target.checked;
     touchControlsPanel.classList.toggle('hidden', !isTouchActive);
+
+    if (isTouchActive) {
+        if (!joystickManager) {
+             joystickManager = nipplejs.create({ 
+                zone: joystickZone, 
+                mode: 'static', 
+                position: { left: '50%', top: '50%' }, 
+                color: 'white', 
+                size: 150 
+            });
+            joystickManager.on('move', (evt, data) => {
+                if (!ollie.device || gamepadIndex !== null || currentMode === 'trick' || isAiming) return;
+                isEmergencyStopped = false;
+                const speed = Math.min(Math.floor(data.distance * 3), 255);
+                const heading = Math.round(data.angle.degree);
+                ollie.currentHeading = heading;
+                let speedCap = isExpertMode ? EXPERT_MAX_SPEED : NORMAL_MAX_SPEED;
+                ollie.drive(heading, Math.round(speed * Math.min(maxSpeed, speedCap)));
+                isDriving = true;
+            });
+            joystickManager.on('end', () => { 
+                if (isDriving) { 
+                    ollie.drive(ollie.currentHeading, 0);
+                    isDriving = false; 
+                } 
+            });
+        }
+    } else {
+        if (joystickManager) {
+            joystickManager.destroy();
+            joystickManager = null;
+        }
+    }
 });
 
 toggleExpertCheckbox.addEventListener('change', (e) => {
@@ -336,6 +343,7 @@ emergencyStopButton.addEventListener('click', () => {
 
 document.getElementById('touch-aim').addEventListener('touchstart', (e) => { 
     e.preventDefault(); 
+    if (isAiming) return; // Prevent re-triggering
     isAiming = true; 
     ollie.setBackLed(255); 
     updateModeIndicator(); 
