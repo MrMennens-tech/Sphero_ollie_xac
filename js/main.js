@@ -23,17 +23,16 @@ let gamepadIndex = null, isDriving = false, previousButtonStates = [];
 let maxSpeed = 0.20, NORMAL_MAX_SPEED = 0.40, EXPERT_MAX_SPEED = 0.60, SPEED_STEP = 0.05;
 let currentMode = 'normal'; // 'normal', 'trick'
 let isExpertMode = false; // Separate toggle for expert
-let isAiming = false, aimButtonPressTime = 0, lastAimHeading = 0;
+let isAiming = false, lastAimHeading = 0;
 let currentColor = { r: 0, g: 191, b: 255 };
 let buttonColorMappings = { x1: '#ff0000', x2: '#0000ff', x3: '#00ff00', x4: '#ffff00' };
-const AIM_HOLD_DURATION = 3000;
 let joystickDeadzone = 0.4;
 let stopCommandInterval = null;
 let trickModeLEDInterval = null;
 let isEmergencyStopped = false;
 
 // --- Controller Configuration ---
-let buttonMappings = { SPEED_UP: 4, SPEED_DOWN: 6, COLOR_X1: 2, COLOR_X2_AIM: 3, COLOR_X3: 0, COLOR_X4: 1, CYCLE_MODE: 10 };
+let buttonMappings = { SPEED_UP: 4, SPEED_DOWN: 6, COLOR_X1: 2, COLOR_X2: 3, COLOR_X3: 0, COLOR_X4: 1, AIM_TOGGLE_RESET: 10 };
 let isWaitingForInput = false;
 let actionToMap = '';
 
@@ -176,13 +175,23 @@ function gameLoop() {
         };
         const btnPressed = (action) => btnState(action) && !previousButtonStates[buttonMappings[action]];
 
-        if (btnPressed('CYCLE_MODE')) {
+        if (btnPressed('AIM_TOGGLE_RESET')) {
              if (isEmergencyStopped) {
                 isEmergencyStopped = false;
                 console.log("Emergency stop reset by button.");
             }
-            ollie.setBackLed(0);
-            console.log("Back LED turned off by button.");
+            isAiming = !isAiming;
+            if (isAiming) {
+                console.log("Aiming started.");
+                ollie.setBackLed(255);
+            } else {
+                console.log("Aiming finished, setting new heading and turning off LED.");
+                ollie.setHeading(lastAimHeading).then(() => {
+                    ollie.setBackLed(0);
+                });
+                ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
+            }
+            updateModeIndicator();
         }
 
         const speedUpPressed = btnState('SPEED_UP');
@@ -191,39 +200,18 @@ function gameLoop() {
             cycleMode();
         }
 
-        if (currentMode === 'trick') {
+        if (isAiming) {
+            handleAiming(gp);
+        } else if (currentMode === 'trick') {
             if (btnPressed('COLOR_X1')) doTrick('spinLeft');
             if (btnPressed('COLOR_X3')) doTrick('flipBackward');
             if (btnPressed('COLOR_X4')) doTrick('spinRight');
-            if (btnPressed('COLOR_X2_AIM')) doTrick('flipForward');
-        } else if (isAiming) {
-            handleAiming(gp);
-            if (!btnState('COLOR_X2_AIM')) {
-                isAiming = false;
-                ollie.setHeading(lastAimHeading).then(() => {
-                    ollie.setBackLed(0);
-                });
-                ollie.setRawMotors(ollie.Motors.off, 0, ollie.Motors.off, 0);
-                updateModeIndicator();
-            }
+            if (btnPressed('COLOR_X2')) doTrick('flipForward');
         } else {
-            if (btnState('COLOR_X2_AIM') && !previousButtonStates[buttonMappings['COLOR_X2_AIM']]) {
-                aimButtonPressTime = Date.now();
+            if (btnPressed('COLOR_X2')) {
+                const { r, g, b } = hexToRgb(buttonColorMappings.x2);
+                applyColor(r, g, b);
             }
-            if (btnState('COLOR_X2_AIM') && (Date.now() - aimButtonPressTime > AIM_HOLD_DURATION)) {
-                if (!isAiming) {
-                    isAiming = true;
-                    ollie.setBackLed(255);
-                    updateModeIndicator();
-                }
-            }
-            if (!btnState('COLOR_X2_AIM') && previousButtonStates[buttonMappings['COLOR_X2_AIM']]) {
-                if (Date.now() - aimButtonPressTime < AIM_HOLD_DURATION) {
-                    const { r, g, b } = hexToRgb(buttonColorMappings.x2);
-                    applyColor(r, g, b);
-                }
-            }
-
             if (btnPressed('SPEED_DOWN')) changeMaxSpeed(-1);
             if (btnPressed('SPEED_UP')) changeMaxSpeed(1);
             if (btnPressed('COLOR_X1')) { const { r, g, b } = hexToRgb(buttonColorMappings.x1); applyColor(r, g, b); }
@@ -343,7 +331,7 @@ emergencyStopButton.addEventListener('click', () => {
 
 document.getElementById('touch-aim').addEventListener('touchstart', (e) => { 
     e.preventDefault(); 
-    if (isAiming) return; // Prevent re-triggering
+    if (isAiming) return;
     isAiming = true; 
     ollie.setBackLed(255); 
     updateModeIndicator(); 
