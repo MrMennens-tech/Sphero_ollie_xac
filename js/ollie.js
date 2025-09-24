@@ -13,7 +13,7 @@ export class Ollie {
         this.controlCharacteristic = null;
 
         this.Motors = {
-            off: 0x00, forward: 0x01, reverse: 0x02,
+            off: 0x00, forward: 0x01, reverse: 0x02, brake: 0x03,
         };
 
         // Constants for BLE services and characteristics
@@ -79,46 +79,93 @@ export class Ollie {
     }
     
     // --- Public Command Methods ---
-    drive(heading, speed) { this.currentHeading = heading; return this._sendCommand(0x02, 0x30, new Uint8Array([speed, heading >> 8, heading & 0xFF, 1])); }
-    stop() { return this.setRawMotors(this.Motors.off, 0, this.Motors.off, 0); }
-    setColor(r, g, b) { return this._sendCommand(0x02, 0x20, new Uint8Array([r, g, b, 0])); }
-    setBackLed(brightness) { return this._sendCommand(0x02, 0x21, new Uint8Array([brightness])); }
-    setHeading(heading) { return this._sendCommand(0x02, 0x01, new Uint8Array([heading >> 8, heading & 0xFF])); }
-    setRawMotors(lmode, lpower, rmode, rpower) { return this._sendCommand(0x02, 0x33, new Uint8Array([lmode, lpower, rmode, rpower])); }
-    async sleep() { await this.setBackLed(0); return this._sendCommand(0x00, 0x22, new Uint8Array([0])); }
-    disconnect() { if (this.device) this.device.gatt.disconnect(); }
+    drive(heading, speed) {
+        this.currentHeading = heading;
+        const did = 0x02, cid = 0x30;
+        const data = new Uint8Array([speed, heading >> 8, heading & 0xFF, 1]);
+        return this._sendCommand(did, cid, data);
+    }
+    
+    stop() {
+        console.log("Sending HARD BRAKE command.");
+        return this.setRawMotors(this.Motors.brake, 0, this.Motors.brake, 0, true);
+    }
 
+    setColor(r, g, b) {
+        const did = 0x02, cid = 0x20;
+        const data = new Uint8Array([r, g, b, 0]);
+        return this._sendCommand(did, cid, data);
+    }
+    setBackLed(brightness) {
+        const did = 0x02, cid = 0x21;
+        const data = new Uint8Array([brightness]);
+        return this._sendCommand(did, cid, data);
+    }
+    setHeading(heading) {
+        const did = 0x02, cid = 0x01;
+        const data = new Uint8Array([heading >> 8, heading & 0xFF]);
+        return this._sendCommand(did, cid, data);
+    }
+    setRawMotors(lmode, lpower, rmode, rpower, highPriority = false) {
+        const did = 0x02, cid = 0x33;
+        const data = new Uint8Array([lmode, lpower, rmode, rpower]);
+        return this._sendCommand(did, cid, data, highPriority);
+    }
+    async sleep() {
+        await this.setBackLed(0);
+        const did = 0x00, cid = 0x22;
+        return this._sendCommand(did, cid, new Uint8Array([0]));
+    }
+    disconnect() {
+        if (this.device) this.device.gatt.disconnect();
+    }
+    
     // --- Private BLE Methods ---
-    async _sendCommand(did, cid, data) {
-        if (this.isBusy) return Promise.resolve();
-        if (!this.device || !this.device.gatt.connected || !this.controlCharacteristic) {
-            return;
+    async _sendCommand(did, cid, data, highPriority = false) {
+        if (this.isBusy && !highPriority) {
+            return; // Don't send if busy, unless it's a high priority command
         }
         this.isBusy = true;
 
-        const seq = this.sequence & 255; this.sequence++;
+        const seq = this.sequence & 255;
+        this.sequence++;
         const sop2 = 0xfc | 1 | 2;
         const dlen = data.byteLength + 1;
         const sum = data.reduce((a, b) => a + b, 0);
         const chk = (sum + did + cid + seq + dlen) & 255 ^ 255;
+
         const packets = new Uint8Array(6 + data.byteLength + 1);
         packets.set([0xff, sop2, did, cid, seq, dlen]);
         packets.set(data, 6);
         packets.set([chk], 6 + data.byteLength);
 
         try {
-            await this.controlCharacteristic.writeValue(packets);
-        } catch (error) { 
-            console.error('Failed to send command:', error); 
-        } 
-        finally { this.isBusy = false; }
+            if (this.controlCharacteristic) {
+                await this.controlCharacteristic.writeValue(packets);
+            } else {
+                console.error('Cannot send command: Control Characteristic not available.');
+            }
+        } catch (error) {
+            console.error('Failed to send command:', error);
+        } finally {
+            this.isBusy = false;
+        }
     }
 
     async _writeCharacteristic(serviceUID, characteristicUID, value) {
-        if (!this.device?.gatt.connected) return Promise.reject(new Error('Device not connected'));
-        const service = await this.device.gatt.getPrimaryService(serviceUID);
-        const characteristic = await service.getCharacteristic(characteristicUID);
-        return characteristic.writeValue(value);
+        if (!this.device?.gatt.connected) {
+            console.error('Write failed: Not connected.');
+            return Promise.reject(new Error('Device not connected'));
+        }
+        try {
+            const service = await this.device.gatt.getPrimaryService(serviceUID);
+            const characteristic = await service.getCharacteristic(characteristicUID);
+            return characteristic.writeValue(value);
+        } catch (error)
+        {
+            console.error(`Error writing to ${characteristicUID}:`, error);
+            throw error;
+        }
     }
 }
 
